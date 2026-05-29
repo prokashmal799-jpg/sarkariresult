@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=Hind:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-baloo: "Baloo 2", "DM Sans", sans-serif;
+  --font-hind: "Hind", "DM Sans", sans-serif;
+
+  --color-navy-950: #0a0f2e;
+  --color-navy-900: #12193e;
+  --color-navy-800: #1a2550;
+  --color-saffron: #FF6B00;
+  --color-gold: #FFB800;
+  --color-emerald-accent: #00C48C;
+  --color-crimson-accent: #E8192C;
+}
+
+@layer utilities {
+  .custom-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scroll::-webkit-scrollbar-thumb {
+    background: #FF6B00;
+    border-radius: 10px;
+  }
+  .custom-scroll::-webkit-scrollbar-track {
+    background: #0a0f2e;
+  }
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 35s linear infinite;
+}
+
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-blink {
+  animation: blink 1.2s infinite;
+}
