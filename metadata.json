@@ -1,6 +1,6 @@
 {
   "name": "BharatJobs",
-  "description": "Next-generation premium Indian Government Job Portal providing active central and state jobs across all 37 listable regions, styled in high-class Digital Bharat aesthetic.",
+  "description": "Premium comprehensive Job Notification Portal styled in the classic Sarkari Result color scheme with active central and state jobs across all listable regions.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

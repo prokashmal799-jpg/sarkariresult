@@ -1,63 +1,52 @@
-export interface StateItem {
-  code: string;
-  name: string;
-  jobsCount: number;
-}
-
-export interface SubJob {
+export interface Job {
+  id: number;
   title: string;
-  count: string;
-  hot?: boolean;
-  new?: boolean;
-}
-
-export interface CategoryCard {
-  id: string;
-  name: string;
-  iconName: string;
-  accentColor: string;
-  badge?: "HOT" | "NEW";
-  totalPosts: string;
-  jobs: SubJob[];
-}
-
-export interface JobRow {
-  id: string;
-  title: string;
-  department: string;
+  org: string;
+  category: string;
+  state: string;
   vacancy: string;
   lastDate: string;
-  qualification: string;
-  tag?: "HOT" | "NEW";
-  // Full details for detailing page
-  jobLocation: string;
-  applyMode: string;
-  ageLimit: string;
-  payScale: string;
-  jobType: string;
-  feeGen: string;
-  feeOBC: string;
-  feeSCST: string;
+  qual: string;
+  salary: string;
+  fee: string;
+  feeSC: string;
   feeFemale: string;
-  startDate: string;
-  officialNotificationUrl: string;
-  applyOnlineUrl: string;
-  fullRequirements?: string;
+  ageLow: string;
+  ageHigh: string;
+  applyLink: string;
+  notifLink: string;
+  status: "active" | "draft" | "upcoming" | "expired";
+  isHot: boolean;
+  isNew: boolean;
+  desc: string;
+  created: string;
 }
 
-export interface ResultLink {
+export interface ExamResult {
+  id: number;
   title: string;
-  tag?: "NEW" | "HOT";
+  exam: string;
+  date: string;
+  link: string;
+  state: string;
+  status: "published" | "draft";
 }
 
-export interface AdmitCardLink {
+export interface AdmitCard {
+  id: number;
   title: string;
-  tag?: "NEW" | "HOT";
+  exam: string;
+  examDate: string;
+  link: string;
+  state: string;
+  status: "published" | "draft";
 }
 
-export interface CalendarEntry {
-  name: string;
-  dateStr: string;
+export interface SiteSettings {
+  siteName: string;
+  tagline: string;
+  email: string;
+  pubId: string;
+  headerSlot: string;
+  sidebarSlot: string;
 }
-
-export type ViewState = "home" | "state" | "job";

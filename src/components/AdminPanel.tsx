@@ -1,1058 +1,1014 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useContext } from "react";
 import { 
-  Briefcase, Plus, Edit3, Trash2, Globe, Users, TrendingUp, DollarSign, 
-  BarChart2, FileText, Bookmark, Database, Check, Sparkles, Send, Share2, 
-  Settings, Radio, Layers, Image, ShieldCheck, HelpCircle, Code, Copy, 
-  Upload, Search, ArrowLeft, ArrowRight, Eye, RefreshCw, Smartphone, Monitor
+  Plus, Edit2, Trash2, LayoutDashboard, Briefcase, FileText, 
+  Settings, ArrowLeft, Terminal, Sparkles, Check, CheckCircle, 
+  AlertTriangle, CreditCard, Calendar, Shield, Activity, RefreshCw,
+  Search, X
 } from "lucide-react";
-import { JobRow, StateItem } from "../types";
+import { 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
+  Tooltip, Cell, AreaChart, Area 
+} from "recharts";
+import { Job, ExamResult, AdmitCard, SiteSettings } from "../types";
+import { AppContext } from "./Website";
+import { JOB_CATS, STATE_CARDS, QUALS } from "../data";
 
-interface AdminPanelProps {
-  jobs: JobRow[];
-  setJobs: React.Dispatch<React.SetStateAction<JobRow[]>>;
-  results: Array<{ title: string; tag?: "NEW" | "HOT" }>;
-  setResults: React.Dispatch<React.SetStateAction<Array<{ title: string; tag?: "NEW" | "HOT" }>>>;
-  admitCards: Array<{ title: string; tag?: "NEW" | "HOT" }>;
-  setAdmitCards: React.Dispatch<React.SetStateAction<Array<{ title: string; tag?: "NEW" | "HOT" }>>>;
-  states: StateItem[];
-  setStates: React.Dispatch<React.SetStateAction<StateItem[]>>;
-  onClose: () => void;
-  onSignOut?: () => void;
-  // Monetization States
-  adSenseEnabled: boolean;
-  setAdSenseEnabled: (val: boolean) => void;
-  adSenseCode: string;
-  setAdSenseCode: (val: string) => void;
-  stickyAdText: string;
-  setStickyAdText: (val: string) => void;
-}
+export const AdminPanel: React.FC = () => {
+  const context = useContext(AppContext);
+  if (!context) return null;
 
-export default function AdminPanel({
-  jobs,
-  setJobs,
-  results,
-  setResults,
-  admitCards,
-  setAdmitCards,
-  states,
-  setStates,
-  onClose,
-  onSignOut,
-  adSenseEnabled,
-  setAdSenseEnabled,
-  adSenseCode,
-  setAdSenseCode,
-  stickyAdText,
-  setStickyAdText
-}: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "jobs" | "states" | "content" | "tools" | "users" | "monetization">("dashboard");
+  const { 
+    jobs, results, admits, ticker, siteSettings, setView, addToast, isLoading
+  } = context;
+
+  // Since context from App holds shared triggers, let's access setters by cast or type
+  // Our App.tsx will declare the variables and setters in context so we can mutate cleanly!
+  const setJobs = (context as any).setJobs;
+  const setResults = (context as any).setResults;
+  const setAdmits = (context as any).setAdmitCards; // From app.tsx state mappings
+  const setTicker = (context as any).setTicker;
+  const setSiteSettings = (context as any).setSiteSettings;
+
+  // Sidebar collapsed state
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Administrative path navigation router
+  const [adminPage, setAdminPage] = useState<
+    "dashboard" | "add-job" | "jobs" | "results" | "admitcards" | "ticker" | "settings"
+  >("dashboard");
+
+  // Selection keys for edits
+  const [editJobId, setEditJobId] = useState<number | null>(null);
   
-  // Jobs Filter & Search
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  
-  // Job Form State
-  const [showJobForm, setShowJobForm] = useState(false);
-  const [formMode, setFormMode] = useState<"add" | "edit">("add");
-  const [editingJobId, setEditingJobId] = useState("");
-  
-  // Form input fields
-  const [formTitle, setFormTitle] = useState("");
-  const [formOrg, setFormOrg] = useState("");
-  const [formAdvNo, setFormAdvNo] = useState("");
-  const [formPostDate, setFormPostDate] = useState("2026-05-29");
-  const [formLastDate, setFormLastDate] = useState("2026-06-30");
-  const [formVacancy, setFormVacancy] = useState("");
-  const [formQual, setFormQual] = useState("Graduate");
-  const [formAgeLimit, setFormAgeLimit] = useState("");
-  const [formFeeGen, setFormFeeGen] = useState("");
-  const [formFeeOBC, setFormFeeOBC] = useState("");
-  const [formFeeSCST, setFormFeeSCST] = useState("Rs. 0/- (Exempted)");
-  const [formFeeFemale, setFormFeeFemale] = useState("Rs. 0/- (Exempted)");
-  const [formSelection, setFormSelection] = useState("Written Examination & Merit List");
-  const [formSalary, setFormSalary] = useState("");
-  const [formLocation, setFormLocation] = useState("All India");
-  const [formApplyMode, setFormApplyMode] = useState("Online Mode");
-  const [formOfficialWeb, setFormOfficialWeb] = useState("https://gov.in");
-  const [formApplyLink, setFormApplyLink] = useState("https://gov.in/apply");
-  const [formRequirements, setFormRequirements] = useState("");
-  const [formType, setFormType] = useState("Central Government Jobs");
-  const [formTag, setFormTag] = useState<"" | "HOT" | "NEW">("");
+  // Modal controllers for simpler modules
+  const [resultModalOpen, setResultModalOpen] = useState(false);
+  const [editResultId, setEditResultId] = useState<number | null>(null);
 
-  // AI Generator tools
-  const [aiJobTitle, setAiJobTitle] = useState("");
-  const [aiGenerating, setAiGenerating] = useState(false);
+  const [admitModalOpen, setAdmitModalOpen] = useState(false);
+  const [editAdmitId, setEditAdmitId] = useState<number | null>(null);
 
-  // XML sitemap generator
-  const [sitemapGenerated, setSitemapGenerated] = useState("");
-  const [sitemapLoading, setSitemapLoading] = useState(false);
+  // Filter keys inside tables
+  const [jobsSearch, setJobsSearch] = useState("");
 
-  // Push notifications
-  const [pushTitle, setPushTitle] = useState("");
-  const [pushBody, setPushBody] = useState("");
-  const [pushSuccess, setPushSuccess] = useState(false);
+  // AI generator spinning loader
+  const [aiLoading, setAiLoading] = useState(false);
 
-  // CSV/PDF simulation
-  const [uploadedFileName, setUploadedFileName] = useState("");
-  const [bulkImportCount, setBulkImportCount] = useState<number | null>(null);
+  // 1. Dashboard calculations
+  const totalJobs = jobs.length;
+  const activeJobsCount = jobs.filter((j) => j.status === "active").length;
+  const hotJobsCount = jobs.filter((j) => j.isHot).length;
+  const totalResults = results.length;
+  const totalAdmits = admits.length;
 
-  // Social Auto-Poster
-  const [telegramFormat, setTelegramFormat] = useState("");
-  const [whatsappFormat, setWhatsappFormat] = useState("");
+  // Data processing for Recharts (Active Jobs grouped by Category)
+  const chartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    JOB_CATS.forEach((cat) => {
+      counts[cat] = 0;
+    });
+    jobs.forEach((job) => {
+      if (counts[job.category] !== undefined) {
+        counts[job.category] += 1;
+      }
+    });
 
-  // Manage Content sub-states
-  const [newResultTitle, setNewResultTitle] = useState("");
-  const [newResultTag, setNewResultTag] = useState<"NEW" | "HOT" | "">("");
-  const [newAdmitTitle, setNewAdmitTitle] = useState("");
-  const [newAdmitTag, setNewAdmitTag] = useState<"NEW" | "HOT" | "">("");
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name: name.replace(" Jobs", ""), count }))
+      .filter((item) => item.count > 0);
+  }, [jobs]);
 
-  // Users Configuration
-  const [teamMembers, setTeamMembers] = useState([
-    { id: "1", name: "Prakash Mal", email: "prokashmal799@gmail.com", role: "Super Admin", statePermission: "All India" },
-    { id: "2", name: "Anand Sharma", email: "anand.sarkari@gmail.com", role: "Editor", statePermission: "Uttar Pradesh" },
-    { id: "3", name: "Rajesh Kumar", email: "rajesh.bseb@gmail.com", role: "Content Writer", statePermission: "Bihar" },
-    { id: "4", name: "Sunita Sen", email: "sunita.wb@gmail.com", role: "State Manager", statePermission: "West Bengal" },
-  ]);
-  const [newMemberName, setNewMemberName] = useState("");
-  const [newMemberEmail, setNewMemberEmail] = useState("");
-  const [newMemberRole, setNewMemberRole] = useState("Editor");
-  const [newMemberState, setNewMemberState] = useState("All India");
+  // Data processing for States distribution Chart
+  const stateChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    jobs.forEach((j) => {
+      counts[j.state] = (counts[j.state] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name: name.slice(0, 10), count }))
+      .slice(0, 7);
+  }, [jobs]);
 
-  // State Management quota modifier
-  const [editingStateCode, setEditingStateCode] = useState<string | null>(null);
-  const [stateQuotaCount, setStateQuotaCount] = useState<number>(0);
-
-  // Reset form helper
-  const resetForm = () => {
-    setFormTitle("");
-    setFormOrg("");
-    setFormAdvNo("Advt No: " + Math.floor(Math.random() * 90) + "/" + new Date().getFullYear());
-    setFormPostDate("2026-05-29");
-    setFormLastDate("2026-06-30");
-    setFormVacancy("1,200");
-    setFormQual("Graduate");
-    setFormAgeLimit("18 to 27 Years. Age relaxation applicable as per rules.");
-    setFormFeeGen("Rs. 100/-");
-    setFormFeeOBC("Rs. 100/-");
-    setFormFeeSCST("Rs. 0/- (Exempted)");
-    setFormFeeFemale("Rs. 0/- (Exempted)");
-    setFormSelection("Computer Based Test (CBT) & Document Verification");
-    setFormSalary("Rs. 35,400 to Rs. 1,12,400 (Pay Level 6)");
-    setFormLocation("All India (Anywhere in India)");
-    setFormApplyMode("Online Mode");
-    setFormOfficialWeb("https://gov.in");
-    setFormApplyLink("https://gov.in/apply");
-    setFormRequirements("Applicants must meet the specified standard eligibility matching the particular qualification. Medical examinations might be requested.");
-    setFormType("Central Government Jobs");
-    setFormTag("");
-  };
-
-  // Trigger Job Form
-  const triggerAddJob = () => {
-    resetForm();
-    setFormMode("add");
-    setShowJobForm(true);
-  };
-
-  const triggerEditJob = (job: JobRow) => {
-    setFormMode("edit");
-    setEditingJobId(job.id);
-    setFormTitle(job.title);
-    setFormOrg(job.department);
-    setFormAdvNo("Advt No: EXAM/" + job.id.toUpperCase());
-    setFormPostDate(job.startDate || "2026-05-29");
-    setFormLastDate(job.lastDate);
-    setFormVacancy(job.vacancy);
-    setFormQual(job.qualification);
-    setFormAgeLimit(job.ageLimit);
-    setFormFeeGen(job.feeGen);
-    setFormFeeOBC(job.feeOBC);
-    setFormFeeSCST(job.feeSCST);
-    setFormFeeFemale(job.feeFemale);
-    setFormSelection(job.applyMode);
-    setFormSalary(job.payScale);
-    setFormLocation(job.jobLocation);
-    setFormApplyMode(job.applyMode);
-    setFormOfficialWeb(job.officialNotificationUrl);
-    setFormApplyLink(job.applyOnlineUrl);
-    setFormRequirements(job.fullRequirements || "");
-    setFormType(job.jobType || "Central Government Jobs");
-    setFormTag(job.tag || "");
-    setShowJobForm(true);
-  };
-
-  // Submit Form Action
-  const handleSaveJob = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formMode === "add") {
-      const newId = formTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now().toString().slice(-4);
-      const newJob: JobRow = {
-        id: newId,
-        title: formTitle,
-        department: formOrg,
-        vacancy: formVacancy,
-        lastDate: formLastDate,
-        qualification: formQual,
-        tag: formTag || undefined,
-        jobLocation: formLocation,
-        applyMode: formApplyMode,
-        ageLimit: formAgeLimit,
-        payScale: formSalary,
-        jobType: formType,
-        feeGen: formFeeGen || "Rs. 100/-",
-        feeOBC: formFeeOBC || "Rs. 100/-",
-        feeSCST: formFeeSCST || "Rs. 0/-",
-        feeFemale: formFeeFemale || "Rs. 0/-",
-        startDate: formPostDate,
-        officialNotificationUrl: formOfficialWeb,
-        applyOnlineUrl: formApplyLink,
-        fullRequirements: formRequirements
-      };
-      setJobs([newJob, ...jobs]);
-    } else {
-      setJobs(jobs.map(j => j.id === editingJobId ? {
-        ...j,
-        title: formTitle,
-        department: formOrg,
-        vacancy: formVacancy,
-        lastDate: formLastDate,
-        qualification: formQual,
-        tag: formTag || undefined,
-        jobLocation: formLocation,
-        applyMode: formApplyMode,
-        ageLimit: formAgeLimit,
-        payScale: formSalary,
-        jobType: formType,
-        feeGen: formFeeGen || "Rs. 100/-",
-        feeOBC: formFeeOBC || "Rs. 100/-",
-        feeSCST: formFeeSCST || "Rs. 0/-",
-        feeFemale: formFeeFemale || "Rs. 0/-",
-        startDate: formPostDate,
-        officialNotificationUrl: formOfficialWeb,
-        applyOnlineUrl: formApplyLink,
-        fullRequirements: formRequirements
-      } : j));
-    }
-    setShowJobForm(false);
-  };
-
-  // Delete Job action
-  const handleDeleteJob = (id: string) => {
-    if (confirm("Are you sure you want to delete this job post permanently?")) {
-      setJobs(jobs.filter(j => j.id !== id));
-    }
-  };
-
-  // AI description generator
-  const handleAIGenerate = () => {
-    if (!aiJobTitle) return;
-    setAiGenerating(true);
-    setTimeout(() => {
-      // Simulate highly robust government job generator matching all India formats
-      const mockAge = "18 to 32 Years. Relaxations applicable: OBC - 3 Years, SC/ST - 5 Years, PwD - 10 Years as per rules.";
-      const mockSalary = "Level 6: Rs. 35,400 - Rs. 1,12,400 per month with standard central DA and HRA bonuses.";
-      const mockReq = `1. Candidates must possess a valid degree/diploma relative to the specific recruitment board requirements.\n2. Must have clean professional or academic character validation declarations.\n3. Selection will be based purely on performance scores secured in Tier-I & Tier-II Computer Based Examinations (CBT).`;
-      const generatedAdvNo = `Sarkari/Advt/${new Date().getFullYear()}/${Math.floor(Math.random() * 500 + 100)}`;
-      
-      setFormTitle(aiJobTitle + " Recruitment 2026");
-      setFormOrg(aiJobTitle.split(" ")[0] + " Board Department");
-      setFormAdvNo(generatedAdvNo);
-      setFormVacancy(Math.floor(Math.random() * 4500 + 150).toString());
-      setFormAgeLimit(mockAge);
-      setFormSalary(mockSalary);
-      setFormRequirements(mockReq);
-      setFormLocation("All India Anywhere in India");
-      setFormFeeGen("Rs. 100/-");
-      setFormFeeOBC("Rs. 100/-");
-      setFormFeeSCST("Rs. 0/- (Exempted)");
-      setFormFeeFemale("Rs. 0/- (Exempted)");
-      
-      setAiGenerating(false);
-      setFormMode("add");
-      setShowJobForm(true);
-    }, 900);
-  };
-
-  // Social Autopost Generator
-  const generateSocialPreviews = (job: JobRow) => {
-    const tgMsg = `📣 *NEW SARKARI ALERT* 📣\n\n📌 *${job.title}*\n🏢 Dept: ${job.department}\n💼 Total Vacancy: ${job.vacancy} Positions\n🎓 Qualification: ${job.qualification}\n📅 Last Date: ${job.lastDate}\n\n👇 *Apply Online / Get Notification PDF* 👇\n📲 https://sarkariprecision.co/jobs/${job.id}\n\n#SarkariResult #GovernmentJobs #Careers`;
-    const waMsg = `*🚀 SARKARI JOBS NOTIFICATION 2026 🚀*\n\n*${job.title}*\n----------------------------------------\n📍 *Organization:* ${job.department}\n⚡ *Vacancies:* ${job.vacancy}\n🎓 *Min Rank:* ${job.qualification}\n📅 *Last Apply Date:* ${job.lastDate}\n\n🌐 *Direct Apply Link & Official Notification Details:*\n👉 https://sarkariprecision.co/jobs/${job.id}\n\n_Share with your friends and family looking for active recruitments!_`;
-    setTelegramFormat(tgMsg);
-    setWhatsappFormat(waMsg);
-  };
-
-  // XML Sitemap preview
-  const generateSitemap = () => {
-    setSitemapLoading(true);
-    setTimeout(() => {
-      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
-      xml += `  <url>\n    <loc>https://sarkariprecision.co/</loc>\n    <priority>1.0</priority>\n    <changefreq>always</changefreq>\n  </url>\n`;
-      jobs.forEach(job => {
-        xml += `  <url>\n    <loc>https://sarkariprecision.co/jobs/${job.id}</loc>\n    <priority>0.8</priority>\n    <changefreq>daily</changefreq>\n  </url>\n`;
-      });
-      xml += `</urlset>`;
-      setSitemapGenerated(xml);
-      setSitemapLoading(false);
-    }, 600);
-  };
-
-  // Bulk simulated CSV importer
-  const handleBulkSimulate = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    setUploadedFileName(file.name);
-    
-    // Simulate parsing CSV with 15 mock Central/State operations
-    setTimeout(() => {
-      const dummyJobs: JobRow[] = [
-        {
-          id: "bulk-rtr-" + Math.random().toString().slice(-4),
-          title: "Railway protection Police Sub Inspector",
-          department: "Ministry of Railways",
-          vacancy: "1,240",
-          lastDate: "20-07-2026",
-          qualification: "Graduate",
-          tag: "HOT",
-          jobLocation: "All India Zone Circles",
-          applyMode: "Online Form",
-          ageLimit: "20-25 Years",
-          payScale: "Rs. 35,400 Level-6 Matrix",
-          jobType: "Central Government Jobs",
-          feeGen: "Rs. 500/-",
-          feeOBC: "Rs. 500/-",
-          feeSCST: "Rs. 250/-",
-          feeFemale: "Rs. 250/-",
-          startDate: "29-05-2026",
-          officialNotificationUrl: "https://rpf.indianrailways.gov.in",
-          applyOnlineUrl: "https://rpf.gov.in/apply"
-        },
-        {
-          id: "bulk-nbb-" + Math.random().toString().slice(-4),
-          title: "NABARD Officer Grade A Exam 2026",
-          department: "National Bank for Agriculture",
-          vacancy: "150",
-          lastDate: "15-07-2026",
-          qualification: "Graduate",
-          tag: "NEW",
-          jobLocation: "Headquarters & State Branches",
-          applyMode: "Online Form",
-          ageLimit: "21-30 Years",
-          payScale: "Rs. 44,500 Base Grade",
-          jobType: "Banking Jobs",
-          feeGen: "Rs. 800/-",
-          feeOBC: "Rs. 800/-",
-          feeSCST: "Rs. 150/-",
-          feeFemale: "Rs. 150/-",
-          startDate: "29-05-2026",
-          officialNotificationUrl: "https://nabard.org",
-          applyOnlineUrl: "https://nabard.org/careers"
-        }
-      ];
-      setJobs([...dummyJobs, ...jobs]);
-      setBulkImportCount(2);
-    }, 800);
-  };
-
-  // Add Admit Card
-  const handleAddAdmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAdmitTitle) return;
-    setAdmitCards([{ title: newAdmitTitle, tag: newAdmitTag || undefined }, ...admitCards]);
-    setNewAdmitTitle("");
-    setNewAdmitTag("");
-  };
-
-  // Add Result
-  const handleAddResult = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newResultTitle) return;
-    setResults([{ title: newResultTitle, tag: newResultTag || undefined }, ...results]);
-    setNewResultTitle("");
-    setNewResultTag("");
-  };
-
-  const handleUpdateStateQuota = (code: string) => {
-    setStates(states.map(s => s.code === code ? { ...s, jobsCount: stateQuotaCount } : s));
-    setEditingStateCode(null);
-  };
-
-  const handlePushSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pushTitle) return;
-    setPushSuccess(true);
-    setTimeout(() => setPushSuccess(false), 4000);
-    setPushTitle("");
-    setPushBody("");
-  };
-
-  const filteredJobsList = jobs.filter(j => {
-    const matchSearch = j.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        j.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        j.qualification.toLowerCase().includes(searchQuery.toLowerCase());
-    if (selectedCategory === "all") return matchSearch;
-    return matchSearch && j.jobType?.toLowerCase().includes(selectedCategory.toLowerCase());
+  // 2. Action triggers and form templates
+  const [jobForm, setJobForm] = useState<Partial<Job>>({
+    title: "",
+    org: "",
+    category: JOB_CATS[0],
+    state: "All India",
+    vacancy: "",
+    lastDate: "",
+    qual: QUALS[5], // Graduate default
+    salary: "",
+    fee: "₹100",
+    feeSC: "Free",
+    feeFemale: "Free",
+    ageLow: "18",
+    ageHigh: "32",
+    applyLink: "",
+    notifLink: "",
+    status: "active",
+    isHot: false,
+    isNew: true,
+    desc: ""
   });
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-white font-sans flex flex-col md:flex-row relative">
+  // Load JobForm helper for Adding or Editing
+  const triggerAddJob = () => {
+    setEditJobId(null);
+    setJobForm({
+      title: "",
+      org: "",
+      category: JOB_CATS[0],
+      state: "All India",
+      vacancy: "",
+      lastDate: "",
+      qual: QUALS[5],
+      salary: "",
+      fee: "₹100",
+      feeSC: "Free",
+      feeFemale: "Free",
+      ageLow: "18",
+      ageHigh: "32",
+      applyLink: "",
+      notifLink: "",
+      status: "active",
+      isHot: false,
+      isNew: true,
+      desc: ""
+    });
+    setAdminPage("add-job");
+  };
+
+  const triggerEditJob = (job: Job) => {
+    setEditJobId(job.id);
+    setJobForm(job);
+    setAdminPage("add-job");
+  };
+
+  // Automated AI recruitment announcement copy simulation
+  const handleAiGenerate = () => {
+    if (!jobForm.title || !jobForm.org) {
+      addToast("⚠ Provide Job Title and Authority Board first!", "warn");
+      return;
+    }
+    setAiLoading(true);
+    setTimeout(() => {
+      const generatedAnnouncement = `🚨 STATUTORY RECRUITMENT NOTICE: ${jobForm.title} 🚨\n\n${jobForm.org} has officially released the recruitment prospectus for filling up ${jobForm.vacancy || "designated"} operational positions of public scope.\n\n📌 KEY ELIGIBILITY PARTICULARS:\n• Employing Authority: ${jobForm.org}\n• Region Allocation: ${jobForm.state}\n• Required Credentials: ${jobForm.qual}\n• Remuneration Scale: ${jobForm.salary || "As per central matrix indices"}\n• Designated Category: ${jobForm.category}\n\n💳 FEE METRIC:\n• General / Other Classes: ${jobForm.fee || "₹100"}\n• SC / ST Classes: ${jobForm.feeSC || "Free"}\n• Females: ${jobForm.feeFemale || "Free"}\n\n⚠️ IMPORTANT RULE REGISTRATION: Registered candidates are urgently advised to download the statutory notification sheet via ${jobForm.notifLink || "Official website links"}. Check all eligibility guidelines completely before uploading qualifications. Fill forms with factual particulars, remit charges, and download printable verification cards before the timeline deadline of ${jobForm.lastDate || "the statutory closing date"}.`;
       
-      {/* SIDEBAR NAVIGATION PANEL */}
-      <aside className="w-full md:w-64 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0">
-        
-        {/* LOGO HERO CONTAINER */}
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-rose-600 p-2 rounded-lg text-white font-black font-baloo tracking-tight shadow-md">
-              SR
+      setJobForm((p) => ({ ...p, desc: generatedAnnouncement }));
+      setAiLoading(false);
+      addToast("✨ AI Recruitment Announcement generated properly!", "success");
+    }, 1200);
+  };
+
+  // CRUD Job publisher
+  const handleSaveJob = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jobForm.title || !jobForm.org || !jobForm.lastDate || !jobForm.vacancy) {
+      addToast("⚠ Please complete all required form fields (*)", "warn");
+      return;
+    }
+
+    if (editJobId) {
+      // Editing
+      const updated = jobs.map((j) => 
+        j.id === editJobId ? { ...(jobForm as Job), id: editJobId, created: j.created } : j
+      );
+      setJobs(updated);
+      addToast("✅ Statutory Job Posting is configured and modified!", "success");
+    } else {
+      // Adding new
+      const newJob: Job = {
+        ...(jobForm as Job),
+        id: Date.now(),
+        created: new Date().toISOString()
+      };
+      setJobs([newJob, ...jobs]);
+      addToast("✅ New Statutory Job Posting published instantly to Website!", "success");
+    }
+    setAdminPage("jobs");
+  };
+
+  // CRUD Delete job
+  const handleDeleteJob = (id: number) => {
+    if (confirm("🚨 Are you absolutely sure you want to delete this job posting? It will instantly disappear from the public website.")) {
+      const filtered = jobs.filter((j) => j.id !== id);
+      setJobs(filtered);
+      addToast("🗑 Job posting successfully deleted from public portals.", "success");
+    }
+  };
+
+  // 3. Results controls
+  const [resultForm, setResultForm] = useState<Partial<ExamResult>>({
+    title: "",
+    exam: "",
+    date: "",
+    link: "",
+    state: "All India",
+    status: "published"
+  });
+
+  const triggerAddResult = () => {
+    setEditResultId(null);
+    setResultForm({
+      title: "",
+      exam: "",
+      date: new Date().toISOString().split("T")[0],
+      link: "https://",
+      state: "All India",
+      status: "published"
+    });
+    setResultModalOpen(true);
+  };
+
+  const triggerEditResult = (res: ExamResult) => {
+    setEditResultId(res.id);
+    setResultForm(res);
+    setResultModalOpen(true);
+  };
+
+  const handleSaveResult = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resultForm.title || !resultForm.exam) {
+      addToast("⚠ Please complete all result fields", "warn");
+      return;
+    }
+
+    if (editResultId) {
+      const updated = results.map((r) => 
+        r.id === editResultId ? { ...(resultForm as ExamResult), id: editResultId } : r
+      );
+      setResults(updated);
+      addToast("✅ Examination Result record successfully updated!", "success");
+    } else {
+      const newRes: ExamResult = {
+        ...(resultForm as ExamResult),
+        id: Date.now()
+      };
+      setResults([newRes, ...results]);
+      addToast("✅ Live Exam Result published instantly to Website!", "success");
+    }
+    setResultModalOpen(false);
+  };
+
+  const handleDeleteResult = (id: number) => {
+    if (confirm("Delete this result record?")) {
+      setResults(results.filter((r) => r.id !== id));
+      addToast("🗑 Result deleted.", "success");
+    }
+  };
+
+  // 4. Admit Cards controls
+  const [admitForm, setAdmitForm] = useState<Partial<AdmitCard>>({
+    title: "",
+    exam: "",
+    examDate: "",
+    link: "",
+    state: "All India",
+    status: "published"
+  });
+
+  const triggerAddAdmit = () => {
+    setEditAdmitId(null);
+    setAdmitForm({
+      title: "",
+      exam: "",
+      examDate: "",
+      link: "https://",
+      state: "All India",
+      status: "published"
+    });
+    setAdmitModalOpen(true);
+  };
+
+  const triggerEditAdmit = (adm: AdmitCard) => {
+    setEditAdmitId(adm.id);
+    setAdmitForm(adm);
+    setAdmitModalOpen(true);
+  };
+
+  const handleSaveAdmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!admitForm.title || !admitForm.examDate) {
+      addToast("⚠ Please complete all required admit card fields", "warn");
+      return;
+    }
+
+    if (editAdmitId) {
+      const updated = admits.map((a) =>
+        a.id === editAdmitId ? { ...(admitForm as AdmitCard), id: editAdmitId } : a
+      );
+      setAdmits(updated);
+      addToast("✅ Examination Admit Card successfully updated!", "success");
+    } else {
+      const newAdm: AdmitCard = {
+        ...(admitForm as AdmitCard),
+        id: Date.now()
+      };
+      setAdmits([newAdm, ...admits]);
+      addToast("✅ Live Admit Card published instantly!", "success");
+    }
+    setAdmitModalOpen(false);
+  };
+
+  const handleDeleteAdmit = (id: number) => {
+    if (confirm("Delete this admit card record?")) {
+      setAdmits(admits.filter((a) => a.id !== id));
+      addToast("🗑 Admit Card record deleted.", "success");
+    }
+  };
+
+  // 5. Notice ticker controls
+  const [tickerEdit, setTickerEdit] = useState(ticker);
+
+  const handleSaveTicker = () => {
+    setTicker(tickerEdit);
+    addToast("📡 Banner Notice updates broadcasted across entire portal!", "success");
+  };
+
+  const handleResetTicker = () => {
+    const defaultText = "🚨 Latest Update: SSC CGL 2025 Combined Graduate Level Online forms are active til 15-June-2025. Apply now! | UP Police Constable Recruitment 60,244 vacancies last date extended to 30-June-2025. | Download UPSC IAS Civils Admission passes now.";
+    setTickerEdit(defaultText);
+    setTicker(defaultText);
+    addToast("↩ Marquee notice reset to default static circular.", "success");
+  };
+
+  // 6. Settings controls
+  const [settingsForm, setSettingsForm] = useState<SiteSettings>({ ...siteSettings });
+
+  const handleSaveSettings = () => {
+    setSiteSettings(settingsForm);
+    addToast("⚙ Portal configurations updated successfully!", "success");
+  };
+
+  // Filter Jobs Table
+  const filteredJobs = useMemo(() => {
+    if (!jobsSearch) return jobs;
+    const q = jobsSearch.toLowerCase();
+    return jobs.filter(
+      (j) =>
+        j.title.toLowerCase().includes(q) ||
+        j.org.toLowerCase().includes(q) ||
+        j.category.toLowerCase().includes(q) ||
+        j.state.toLowerCase().includes(q)
+    );
+  }, [jobs, jobsSearch]);
+
+  return (
+    <div className="flex h-screen bg-[#F0F4FF] overflow-hidden text-slate-800 font-sans">
+      
+      {/* RED DANGER HEADER TOP STRIP */}
+      <div className="absolute top-0 left-0 right-0 h-10.5 bg-[#cc0000] text-white flex items-center justify-between px-4 z-40 shadow-md">
+        <div className="flex items-center gap-2">
+          <Shield className="w-5 h-5 text-yellow-350 fill-yellow-350" />
+          <span className="font-extrabold text-xs uppercase tracking-widest font-mono">
+            {siteSettings.siteName} &bull; SARKARI SECURE SUPER ADMIN CENTER
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="bg-yellow-400 text-[#003399] font-black text-[9px] px-2 py-0.5 rounded-full uppercase leading-none">
+            {activeJobsCount} Active Vacancies
+          </span>
+          <button
+            onClick={() => setView("site")}
+            className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-1 rounded text-xs font-black tracking-wide uppercase transition cursor-pointer"
+          >
+            🌐 View Site
+          </button>
+        </div>
+      </div>
+
+      {/* SIDEBAR NAVIGATION CONTROL (COLLAPSIBLE DARK BLUE) */}
+      <aside 
+        className={`bg-[#003399] text-white flex flex-col pt-11 justify-between shadow-2xl transition-all duration-300 z-30 shrink-0 select-none ${collapsed ? "w-[58px]" : "w-[220px]"}`}
+      >
+        <div className="flex flex-col gap-5 pt-3">
+          
+          {/* Collapse logo block */}
+          <div className="flex items-center justify-between p-4 border-b border-white/15 h-16">
+            {!collapsed && (
+              <div className="flex items-center gap-2">
+                <Shield className="w-7 h-7 text-yellow-400" />
+                <div>
+                  <span className="block font-black font-baloo text-sm tracking-tight leading-none text-white">Sarkari Controller</span>
+                  <span className="text-[8px] tracking-widest text-[#FF6B00] uppercase font-bold">Authenticated Admin</span>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-white hover:bg-white/10 p-1.5 rounded-lg border border-white/15 transition cursor-pointer mx-auto"
+            >
+              {collapsed ? "»" : "«"}
+            </button>
+          </div>
+
+          {/* Links list */}
+          <nav className="flex flex-col gap-1.5 px-2 font-semibold">
+            {[
+              { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4.5 h-4.5" /> },
+              { id: "jobs", label: "Manage Jobs", icon: <Briefcase className="w-4.5 h-4.5" /> },
+              { id: "add-job", label: "Publish Job Card", action: triggerAddJob, icon: <Plus className="w-4.5 h-4.5" /> },
+              { id: "results", label: "Results Ledger", icon: <FileText className="w-4.5 h-4.5" /> },
+              { id: "admitcards", label: "Admit Downloaders", icon: <Calendar className="w-4.5 h-4.5" /> },
+              { id: "ticker", label: "Notice Marquee", icon: <Terminal className="w-4.5 h-4.5" /> },
+              { id: "settings", label: "Site Configuration", icon: <Settings className="w-4.5 h-4.5" /> }
+            ].map((link) => {
+              const active = adminPage === link.id;
+              return (
+                <button
+                  key={link.id}
+                  onClick={link.action || (() => setAdminPage(link.id as any))}
+                  className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-left text-xs tracking-wide cursor-pointer transition-all duration-150 relative ${active ? "bg-[rgba(255,107,0,0.18)] text-[#fbbf24] border-l-4 border-[#FF6B00]" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <span className="shrink-0">{link.icon}</span>
+                  {!collapsed && <span className="truncate">{link.label}</span>}
+                </button>
+              );
+            })}
+
+            {/* View Website instant selector block */}
+            <button
+              onClick={() => setView("site")}
+              className="w-full mt-4 flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-left text-xs bg-emerald-600/25 border-l-4 border-emerald-500 hover:bg-[#16a34a] text-emerald-400 hover:text-white transition cursor-pointer"
+            >
+              <Activity className="w-4.5 h-4.5 shrink-0" />
+              {!collapsed && <span className="font-bold">🌐 View Website</span>}
+            </button>
+          </nav>
+        </div>
+
+        {/* Supervision login avatar at footer */}
+        {!collapsed && (
+          <div className="p-4 border-t border-white/10 bg-black/15 flex items-center gap-3 h-16">
+            <div className="w-8 h-8 rounded-full bg-[#FF6B00] border border-white/25 flex items-center justify-center font-bold font-mono text-sm text-white">
+              SA
             </div>
-            <div>
-              <h2 className="font-extrabold font-baloo tracking-tight text-white leading-none text-base">SARKARI CONTROL</h2>
-              <span className="text-[9px] text-[#22c55e] block font-bold mt-1 tracking-wider uppercase">● SUPERADMIN ONLINE</span>
+            <div className="text-left leading-none">
+              <p className="text-xs font-bold text-white">Super Admin</p>
+              <span className="text-[8.5px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block animate-ping"></span> ONLINE
+              </span>
             </div>
           </div>
-          
-          <button 
-            onClick={onClose}
-            className="md:hidden p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* MENUS SCROLL GRID */}
-        <nav className="p-3.5 space-y-1 select-none flex-1 overflow-y-auto custom-scroll">
-          <button 
-            onClick={() => setActiveTab("dashboard")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "dashboard" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <BarChart2 className="w-4 h-4" />
-            Dashboard Analytics
-          </button>
-          
-          <button 
-            onClick={() => { setActiveTab("jobs"); setShowJobForm(false); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "jobs" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <Briefcase className="w-4 h-4" />
-            Job Listings Editor
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("states")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "states" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <Globe className="w-4 h-4" />
-            All India State Quotas
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("content")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "content" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <Radio className="w-4 h-4" />
-            Results & Admit Cards
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("tools")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "tools" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            Advanced & AI Tools
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("users")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "users" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            Staff & Permissions
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("monetization")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-              activeTab === "monetization" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:bg-slate-900 hover:text-white"
-            }`}
-          >
-            <DollarSign className="w-4 h-4" />
-            Ad Placement Manager
-          </button>
-        </nav>
-
-        {/* QUICK LINK BACK TO HOME PORTAL */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40 select-none space-y-2">
-          {onSignOut && (
-            <button 
-              onClick={onSignOut}
-              className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-750 text-rose-500 py-2.5 px-3 rounded-lg text-xs font-bold transition-all transform active:scale-95 border border-slate-700"
-            >
-              🔒 Security Sign Out
-            </button>
-          )}
-          <button 
-            onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 bg-[#cc0000] hover:bg-[#aa0000] text-white py-2.5 px-3 rounded-lg text-xs font-bold transition-all transform active:scale-95 shadow-md shadow-rose-900/30"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            View Public Website
-          </button>
-        </div>
+        )}
       </aside>
 
-      {/* STAGE AREA WINDOW WITH CORNER BACKGROUND */}
-      <main className="flex-1 flex flex-col p-4 md:p-6 overflow-x-hidden min-h-0 bg-slate-900">
+      {/* CORE WORKSPACE CONTENT AND SWITCHER MODULE */}
+      <main className="flex-1 flex flex-col pt-10.5 overflow-hidden">
         
-        {/* TOP META CONTROLS HEADER */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 shrink-0">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black font-baloo tracking-tight text-white uppercase flex items-center gap-2">
-              Sarkari Result Admin Control Panel 
-              <span className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full lowercase font-mono">v3.5.0-production</span>
-            </h1>
-            <p className="text-slate-400 text-xs mt-1">
-              Add and maintain jobs, configure advertisement modules, publish instant results and admit cards dynamically.
-            </p>
+        {isLoading ? (
+          <div className="flex-1 flex flex-col items-center justify-center bg-white">
+            <RefreshCw className="w-10 h-10 text-[#003399] animate-spin mb-3" />
+            <p className="text-slate-500 text-sm font-semibold">Synchronizing central government databases securely...</p>
           </div>
+        ) : (
+          <div className="flex-1 p-6 overflow-y-auto space-y-6">
 
-          <div className="flex gap-2.5 self-stretch sm:self-auto select-none">
-            <button 
-              onClick={onClose} 
-              className="flex-1 sm:flex-initial bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-xs font-semibold border border-slate-750 transition-all flex items-center justify-center gap-2"
-            >
-              <Eye className="w-4 h-4" />
-              Live Preview Portal
-            </button>
-            <button 
-              onClick={triggerAddJob}
-              className="flex-1 sm:flex-initial bg-[#22c55e] hover:bg-[#1ca34d] text-white px-4 py-2 rounded-lg text-xs font-bold shadow-lg shadow-emerald-950/20 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Post Sarkari Job
-            </button>
-          </div>
-        </header>
-
-        {/* CONTAINER SWITCH DECISION FRAME */}
-        <div className="flex-1 py-6">
-
-          {/* ==================== TAB 1: DASHBOARD METRICS ANALYTICS ==================== */}
-          {activeTab === "dashboard" && (
-            <div className="space-y-6">
-              
-              {/* PRIMARY KPI ANALYTICS ROW */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center gap-3.5">
-                  <div className="p-3 bg-blue-500/10 text-blue-400 rounded-lg">
-                    <Briefcase className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block font-bold uppercase tracking-wider">Total Active Jobs</span>
-                    <span className="text-lg sm:text-xl font-extrabold text-white mt-1 block">{jobs.length} Posts</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center gap-3.5">
-                  <div className="p-3 bg-purple-500/10 text-purple-400 rounded-lg">
-                    <Database className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block font-bold uppercase tracking-wider">Admit Cards Live</span>
-                    <span className="text-lg sm:text-xl font-extrabold text-white mt-1 block">{admitCards.length} Cards</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center gap-3.5">
-                  <div className="p-3 bg-amber-500/10 text-amber-400 rounded-lg">
-                    <Radio className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block font-bold uppercase tracking-wider">Declared Results</span>
-                    <span className="text-lg sm:text-xl font-extrabold text-white mt-1 block">{results.length} Releases</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center gap-3.5">
-                  <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg">
-                    <DollarSign className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block font-bold uppercase tracking-wider">Mock Ad Revenue</span>
-                    <span className="text-lg sm:text-xl font-extrabold text-emerald-400 mt-1 block">Rs. 84,350 / mo</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECONDARY ROW: WEBSITES TRAFFIC CHART & RECENT TRENDING ACTIVITY */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* SUB ROUTER VIEW: A) DASHBOARD */}
+            {adminPage === "dashboard" && (
+              <div className="space-y-6">
                 
-                {/* REVENUE & TRAFFIC MOCK VISUALIZER CHART */}
-                <div className="lg:col-span-2 bg-slate-950 p-5 rounded-xl border border-slate-800">
-                  <div className="flex items-center justify-between pb-4 border-b border-slate-850">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-emerald-400" />
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider">Daily Visitors & Dynamic Metric Logs</h3>
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-semibold bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">Real-time stats</span>
+                {/* Welcome strip banner */}
+                <div className="bg-[#003399] text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
+                  <div className="absolute right-0 top-0 opacity-10 p-6">
+                    <Shield className="w-32 h-32 text-yellow-300" />
                   </div>
-
-                  <div className="py-6 flex flex-col justify-between">
-                    <div className="flex items-end justify-between h-40 gap-1.5 pt-4 border-b border-slate-800">
-                      {[15, 30, 45, 25, 60, 80, 50, 95, 75, 110, 85, 140, 100, 125, 160].map((val, idx) => (
-                        <div key={idx} className="flex-1 flex flex-col items-center gap-2">
-                          <div 
-                            style={{ height: `${(val / 160) * 100}%` }} 
-                            className="bg-gradient-to-t from-blue-600 via-indigo-500 to-indigo-400 hover:to-amber-500 transition-all rounded-t-sm w-full relative group cursor-pointer"
-                          >
-                            <span className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 bg-slate-800 text-[9px] text-white px-1.5 py-0.5 rounded whitespace-nowrap shadow transition-opacity border border-slate-700 z-10 font-mono">
-                              {val * 50} Views
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {/* CHART TIMELINE */}
-                    <div className="flex justify-between text-[9px] text-slate-500 pt-2.5 font-bold font-mono">
-                      <span>May 15</span>
-                      <span>May 18</span>
-                      <span>May 21</span>
-                      <span>May 24</span>
-                      <span>May 27</span>
-                      <span>Today (May 29)</span>
-                    </div>
+                  <div>
+                    <h2 className="text-lg md:text-xl font-bold font-baloo text-yellow-350">
+                      Welcome, Senior Recruiter Controller
+                    </h2>
+                    <p className="text-xs text-slate-300 max-w-xl mt-1.5 font-medium">
+                      All administrative notifications are broadcasted instantly to thousands of Indian candidates searching credentials catalogs, admit cards, and merit lists.
+                    </p>
                   </div>
-
-                  <div className="grid grid-cols-3 gap-3 text-center border-t border-slate-850 pt-4 mt-2">
-                    <div>
-                      <span className="text-[10px] text-slate-500 block">Total Candidates</span>
-                      <strong className="text-sm text-white mt-0.5 block font-mono">1,120,450</strong>
-                    </div>
-                    <div className="border-x border-slate-900">
-                      <span className="text-[10px] text-slate-500 block">Server Uptime</span>
-                      <strong className="text-sm text-[#22c55e] mt-0.5 block font-mono">99.98%</strong>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 block">Avg Session Time</span>
-                      <strong className="text-sm text-white mt-0.5 block font-mono">4.2 min</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* SARKARI LOGGING TERMINAL & QUICK NOTIFICATION BOX */}
-                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 flex flex-col">
-                  <div className="flex items-center gap-2 pb-3 border-b border-slate-850">
-                    <Layers className="w-4 h-4 text-blue-400" />
-                    <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider">Live System Logs</h3>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto mt-4 space-y-3 font-mono text-[10px] text-slate-400">
-                    <div className="flex items-start gap-1 p-1 bg-slate-900/50 rounded">
-                      <span className="text-blue-400 font-bold">[INFO]</span>
-                      <span>Published "UPSC prelims schedules" via Sub Admin Anand.</span>
-                    </div>
-                    <div className="flex items-start gap-1 p-1 bg-slate-900/50 rounded">
-                      <span className="text-emerald-400 font-bold">[SEO]</span>
-                      <span>Sitemap.xml crawled successfully by Google Searchbot.</span>
-                    </div>
-                    <div className="flex items-start gap-1 p-1 bg-slate-900/50 rounded">
-                      <span className="text-amber-400 font-bold">[WARN]</span>
-                      <span>Clipped "RRB NTPC apply link" auto-expiry detected.</span>
-                    </div>
-                    <div className="flex items-start gap-1 p-1 bg-slate-900/50 rounded">
-                      <span className="text-[#22c55e] font-bold">[PING]</span>
-                      <span>WhatsApp Share widget broadcasted 1,200 alert clicks.</span>
-                    </div>
-                    <div className="flex items-start gap-1 p-1 bg-slate-900/50 rounded">
-                      <span className="text-teal-400 font-bold">[AD]</span>
-                      <span>AdSense Header Slot rendering active. CTR: 2.14%</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 mt-4 select-none">
-                    <h4 className="text-[10px] font-bold text-white uppercase mb-1">State Manager Assignment</h4>
-                    <p className="text-[9px] text-[#94a3b8]">West Bengal recruitment cycles currently updated by Sunita Sen. Bihar STET controlled by Rajesh Kumar.</p>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* SECTION: STATE WISE JOB TABULATION OVERVIEW */}
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 select-none">
-                <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider mb-4 text-white flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-400" />
-                  State-wise Active Jobs Counter Matrix
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 text-xs">
-                  {states.slice(0, 18).map(st => (
-                    <div key={st.code} className="bg-slate-900 p-2.5 rounded border border-slate-800 flex justify-between items-center hover:bg-slate-850 transition-colors">
-                      <span className="font-semibold text-slate-300">{st.name}</span>
-                      <span className="font-mono text-[10px] bg-indigo-950/40 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-900">{st.jobsCount}</span>
-                    </div>
-                  ))}
-                  <div className="bg-slate-900 p-2.5 rounded border border-dashed border-slate-750 flex justify-center items-center">
-                    <span onClick={() => setActiveTab("states")} className="text-[10px] text-slate-400 font-bold hover:text-white cursor-pointer hover:underline">View All 30+ States →</span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ==================== TAB 2: JOB CRUD MANAGER LISTING ==================== */}
-          {activeTab === "jobs" && (
-            <div className="space-y-6">
-              
-              {/* SEARCH & ADD JOB FILTERS TOOLBAR */}
-              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <div className="flex-1 flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
-                    <input 
-                      type="text" 
-                      placeholder="Search jobs by keyword/title/dept..." 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2 pl-9 pr-4 text-xs font-semibold focus:outline-none focus:border-blue-500 text-white"
-                    />
-                  </div>
-                  
-                  <select 
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none focus:border-blue-500 text-slate-300"
-                  >
-                    <option value="all">All Category sectors</option>
-                    <option value="central">Central Govt</option>
-                    <option value="railway">Railways</option>
-                    <option value="banking">Banking</option>
-                    <option value="police">Police & Defence</option>
-                    <option value="ssc">SSC</option>
-                    <option value="upsc">UPSC</option>
-                  </select>
-                </div>
-
-                <div className="flex gap-2">
-                  <button 
-                    onClick={triggerAddJob}
-                    className="flex-1 md:flex-initial bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" /> Add New Job
-                  </button>
-                </div>
-              </div>
-
-              {/* EXPANDABLE JOB FORM (CRITICAL ASKS) */}
-              {showJobForm && (
-                <form 
-                  onSubmit={handleSaveJob}
-                  className="bg-slate-950 p-6 rounded-xl border-2 border-blue-500/80 space-y-6 relative animate-scale-up"
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-850">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="text-amber-400 w-4.5 h-4.5" />
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-400">
-                        {formMode === "add" ? "Post Dynamic Government Job Details" : `Editing Job Target: [id: ${editingJobId}]`}
-                      </h3>
-                    </div>
-                    <button 
-                      type="button" 
-                      onClick={() => setShowJobForm(false)} 
-                      className="p-1 px-2.5 bg-slate-900 hover:bg-slate-800 text-xs rounded border border-slate-800 text-slate-400 hover:text-white"
+                  <div className="flex gap-2">
+                    <button
+                      onClick={triggerAddJob}
+                      className="bg-[#FF6B00] hover:bg-orange-600 text-white text-xs px-4 py-2 rounded-xl font-bold tracking-wide uppercase transition shadow-md cursor-pointer flex items-center gap-1"
                     >
-                      Hide Form
+                      <Plus className="w-4 h-4" /> Add Job
+                    </button>
+                    <button
+                      onClick={() => setView("site")}
+                      className="bg-white/15 hover:bg-white/25 text-white text-xs px-4 py-2 rounded-xl border border-white/20 font-bold tracking-wide uppercase transition cursor-pointer"
+                    >
+                      View Live Site
                     </button>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Job Post Title *</label>
-                      <input 
-                        type="text" required value={formTitle} onChange={(e) => setFormTitle(e.target.value)}
-                        placeholder="e.g. UPSC Combined Defence Services (CDS)"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white font-semibold outline-none"
-                      />
+                {/* Stat numbers cells */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 select-none">
+                  {[
+                    { title: "Total Job Cards", val: totalJobs, bg: "bg-white text-blue-800 border-l-4 border-blue-600" },
+                    { title: "Active Vacancies", val: activeJobsCount, bg: "bg-white text-emerald-800 border-l-4 border-emerald-500" },
+                    { title: "Exam Results", val: totalResults, bg: "bg-white text-[#7e3af2] border-l-4 border-purple-500" },
+                    { title: "Admit Card Sheets", val: totalAdmits, bg: "bg-white text-amber-800 border-l-4 border-amber-500" }
+                  ].map((stat, idx) => (
+                    <div key={idx} className={`p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col ${stat.bg}`}>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">{stat.title}</span>
+                      <strong className="text-2xl font-black font-baloo leading-none">{stat.val}</strong>
                     </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Organization / Department *</label>
-                      <input 
-                        type="text" required value={formOrg} onChange={(e) => setFormOrg(e.target.value)}
-                        placeholder="e.g. Union Public Service Commission"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white font-semibold outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Advertisement Details Number *</label>
-                      <input 
-                        type="text" required value={formAdvNo} onChange={(e) => setFormAdvNo(e.target.value)}
-                        placeholder="e.g. Advt No: 08/2026/CDS-II"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white font-semibold outline-none"
-                      />
+                  ))}
+                </div>
+
+                {/* Double visualization chart boards */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  
+                  {/* Category distributions */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+                    <h3 className="font-baloo text-xs uppercase tracking-wider font-extrabold text-slate-500 border-b border-light pb-2">
+                      Active Jobs Distribution by Category
+                    </h3>
+                    <div className="h-56">
+                      {chartData.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-slate-400 text-xs">No active posts available for metrics.</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData}>
+                            <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} />
+                            <YAxis stroke="#94a3b8" fontSize={9} allowDecimals={false} />
+                            <Tooltip contentStyle={{ fontSize: 11, borderRadius: 10 }} />
+                            <Bar dataKey="count" fill="#FF6B00" radius={[4, 4, 0, 0]}>
+                              {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={index % 2 === 0 ? "#FF6B00" : "#003399"} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Post Opening Date</label>
-                      <input 
-                        type="date" value={formPostDate} onChange={(e) => setFormPostDate(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Last Date to Submit *</label>
-                      <input 
-                        type="text" required value={formLastDate} onChange={(e) => setFormLastDate(e.target.value)}
-                        placeholder="e.g. 30-06-2026"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none font-mono font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Total Vacancies *</label>
-                      <input 
-                        type="text" required value={formVacancy} onChange={(e) => setFormVacancy(e.target.value)}
-                        placeholder="e.g. 17,727 or Expected Soon"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-[#22c55e] font-extrabold outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Essential Qualification *</label>
-                      <input 
-                        type="text" required value={formQual} onChange={(e) => setFormQual(e.target.value)}
-                        placeholder="e.g. 10th Pass / Graduate"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white font-semibold outline-none"
-                      />
+                  {/* Operational updates history logs list */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+                    <h3 className="font-baloo text-xs uppercase tracking-wider font-extrabold text-slate-500 border-b border-light pb-2">
+                      Regional State Distribution Analysis
+                    </h3>
+                    <div className="h-56">
+                      {stateChartData.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-slate-400 text-xs">No jobs locations designated.</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={stateChartData}>
+                            <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} />
+                            <YAxis stroke="#94a3b8" fontSize={9} />
+                            <Tooltip contentStyle={{ fontSize: 11, borderRadius: 10 }} />
+                            <Area type="monotone" dataKey="count" stroke="#003399" fill="#F0F4FF" strokeWidth={2.5} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
 
-                  {/* AGE STRUCTURING & SALARY SCALES */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Age Limit Specifications</label>
-                      <input 
-                        type="text" value={formAgeLimit} onChange={(e) => setFormAgeLimit(e.target.value)}
-                        placeholder="e.g. 18 to 27 Years. Age relaxations apply."
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Selection Process Description</label>
-                      <input 
-                        type="text" value={formSelection} onChange={(e) => setFormSelection(e.target.value)}
-                        placeholder="e.g. Written CBT Tier-I & Physical test"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-bold mb-1">Salary Details / Pay Scale</label>
-                      <input 
-                        type="text" value={formSalary} onChange={(e) => setFormSalary(e.target.value)}
-                        placeholder="e.g. Rs. 21,700 - Rs. 69,100 (Pay Level-3)"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
-                      />
-                    </div>
-                  </div>
+                </div>
 
-                  {/* APPLICATION FEES SPLIT */}
-                  <div className="p-4 bg-slate-900 rounded-lg border border-slate-800 text-xs">
-                    <span className="block text-[10px] font-bold uppercase tracking-wider mb-3 text-indigo-400">Application Fees Details Panel</span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-slate-500 mb-1 font-bold font-mono">General Fee</label>
-                        <input 
-                          type="text" value={formFeeGen} onChange={(e) => setFormFeeGen(e.target.value)} placeholder="Rs. 100/-"
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded p-2 text-white font-semibold outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 mb-1 font-bold font-mono">OBC/EWS Fee</label>
-                        <input 
-                          type="text" value={formFeeOBC} onChange={(e) => setFormFeeOBC(e.target.value)} placeholder="Rs. 100/-"
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded p-2 text-white font-semibold outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 mb-1 font-bold font-mono">SC/ST Fee</label>
-                        <input 
-                          type="text" value={formFeeSCST} onChange={(e) => setFormFeeSCST(e.target.value)} placeholder="Rs. 0/-"
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded p-2 text-[#22c55e] font-semibold outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 mb-1 font-bold font-mono">Females Fee</label>
-                        <input 
-                          type="text" value={formFeeFemale} onChange={(e) => setFormFeeFemale(e.target.value)} placeholder="Rs. 0/- (Exempt)"
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded p-2 text-[#22c55e] font-semibold outline-none"
-                        />
-                      </div>
-                    </div>
+                {/* Shortcuts toolbar */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                  <h3 className="font-sans font-extrabold text-[#003399] text-xs uppercase tracking-wider mb-4 border-b border-light pb-2.5">
+                    ⚙ Super Admin Shortcuts
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 select-none">
+                    <button onClick={triggerAddJob} className="bg-slate-50 border border-slate-150 p-4 rounded-xl text-center hover:border-blue-400 hover:bg-blue-50 transition cursor-pointer flex flex-col items-center">
+                      <Briefcase className="w-5 h-5 text-[#003399] mb-1.5" />
+                      <span className="text-[11px] font-bold text-slate-700">Add New Job</span>
+                    </button>
+                    <button onClick={triggerAddResult} className="bg-slate-50 border border-slate-150 p-4 rounded-xl text-center hover:border-purple-400 hover:bg-[#F0F4FF] transition cursor-pointer flex flex-col items-center">
+                      <FileText className="w-5 h-5 text-purple-700 mb-1.5" />
+                      <span className="text-[11px] font-bold text-slate-700">Add Exam Result</span>
+                    </button>
+                    <button onClick={triggerAddAdmit} className="bg-slate-50 border border-slate-150 p-4 rounded-xl text-center hover:border-yellow-400 hover:bg-yellow-50 transition cursor-pointer flex flex-col items-center">
+                      <Calendar className="w-5 h-5 text-amber-500 mb-1.5" />
+                      <span className="text-[11px] font-bold text-slate-700">Add Admit Card</span>
+                    </button>
+                    <button onClick={() => setAdminPage("ticker")} className="bg-slate-50 border border-slate-150 p-4 rounded-xl text-center hover:border-red-400 hover:bg-rose-50 transition cursor-pointer flex flex-col items-center">
+                      <Terminal className="w-5 h-5 text-rose-500 mb-1.5" />
+                      <span className="text-[11px] font-bold text-slate-700">Edit Scrolling notice</span>
+                    </button>
                   </div>
+                </div>
 
-                  {/* OFFICIAL WEBSITES AND CHANNELS (Asks links table) */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              </div>
+            )}
+
+            {/* SUB ROUTER VIEW: B) MANAGE JOBS LIST */}
+            {adminPage === "jobs" && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                      💼 All Government Job Postings ({totalJobs})
+                    </h2>
+                    <p className="text-xs text-slate-400 font-semibold">Active CRUD dashboard to modify or configure recruitment notices instantly.</p>
+                  </div>
+                  <button
+                    onClick={triggerAddJob}
+                    className="bg-[#FF6B00] hover:bg-orange-600 text-white text-xs px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-4.5 h-4.5" /> Publish New Notice
+                  </button>
+                </div>
+
+                {/* Filter and quick bar */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+                  <Search className="w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter publications by title, authority boards or state locations..."
+                    value={jobsSearch}
+                    onChange={(e) => setJobsSearch(e.target.value)}
+                    className="bg-transparent border-0 text-xs font-semibold placeholder-slate-400 outline-none w-full"
+                  />
+                </div>
+
+                {/* Tables ledger */}
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-md">
+                  {filteredJobs.length === 0 ? (
+                    <div className="p-10.5 text-center text-slate-400 text-xs font-bold">No matching job records index located in ledger databases.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs font-sans font-semibold">
+                        <thead>
+                          <tr className="bg-[#003399] text-white uppercase tracking-wider text-[9px]">
+                            <th className="p-4">Recruitment Title</th>
+                            <th className="p-4">Category Group</th>
+                            <th className="p-4">Jurisdiction State</th>
+                            <th className="p-4">Positions</th>
+                            <th className="p-4">Timeline Close</th>
+                            <th className="p-4">Publish status</th>
+                            <th className="p-4 text-center">Operation Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredJobs.map((j) => (
+                            <tr key={j.id} className="border-b border-light/75 last:border-0 hover:bg-slate-55 hover:bg-orange-50/15">
+                              <td className="p-4 font-bold text-slate-800 tracking-tight max-w-sm">
+                                <span className="block">{j.title}</span>
+                                <div className="flex gap-1.5 mt-1 select-none">
+                                  {j.isHot && <span className="bg-red-100 text-red-700 font-extrabold text-[8px] px-1 py-0.5 rounded">HOT</span>}
+                                  {j.isNew && <span className="bg-orange-100 text-[#FF6B00] font-extrabold text-[8px] px-1 py-0.5 rounded">NEW</span>}
+                                </div>
+                              </td>
+                              <td className="p-4 text-slate-500 font-bold">{j.category}</td>
+                              <td className="p-4 text-slate-500 font-bold">{j.state}</td>
+                              <td className="p-4 text-[#003399] font-extrabold font-baloo">{j.vacancy}</td>
+                              <td className="p-4 text-[#e8192c] font-bold font-baloo">{j.lastDate}</td>
+                              <td className="p-4">
+                                <span className={`text-[8.5px] uppercase font-black px-2 py-0.5 rounded-full border ${j.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
+                                  {j.status}
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => triggerEditJob(j)}
+                                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 p-2 rounded-lg cursor-pointer"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteJob(j.id)}
+                                    className="bg-rose-100 hover:bg-rose-200 text-rose-700 p-2 rounded-lg cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+
+            {/* SUB ROUTER VIEW: C) PUBLISH OR EDIT JOB FORM */}
+            {adminPage === "add-job" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setAdminPage("jobs")}
+                    className="border border-slate-200 bg-white p-2.5 rounded-xl hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                      {editJobId ? "✏ Edit Stat recruitment notice" : "➕ Publish New Government Job Alert"}
+                    </h2>
+                    <p className="text-xs text-slate-400 font-semibold">Inputs are updated in real-time onto public listings pages upon saving.</p>
+                  </div>
+                </div>
+
+                {/* Master input card */}
+                <form onSubmit={handleSaveJob} className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-md space-y-6">
+                  
+                  {/* Two columns grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left text-xs font-bold text-slate-600 font-sans">
+                    
                     <div>
-                      <label className="block text-slate-400 font-bold mb-1">Official Website URL *</label>
-                      <input 
-                        type="url" required value={formOfficialWeb} onChange={(e) => setFormOfficialWeb(e.target.value)}
-                        placeholder="https://ssc.gov.in"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
+                      <label className="block mb-1.5 uppercase tracking-wide">Recruitment Job Title *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., SSC CGL Online Form 2025"
+                        required
+                        value={jobForm.title}
+                        onChange={(e) => setJobForm((p) => ({ ...p, title: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-slate-400 font-bold mb-1">Direct Online Apply Link *</label>
-                      <input 
-                        type="url" required value={formApplyLink} onChange={(e) => setFormApplyLink(e.target.value)}
-                        placeholder="https://ssc.gov.in/apply"
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
+                      <label className="block mb-1.5 uppercase tracking-wide">Employing Authority / Board *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Staff Selection Commission (SSC)"
+                        required
+                        value={jobForm.org}
+                        onChange={(e) => setJobForm((p) => ({ ...p, org: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-slate-400 font-bold mb-1">Applet Placement Sector Category</label>
-                      <select 
-                        value={formType} onChange={(e) => setFormType(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-slate-300 font-semibold outline-none"
+                      <label className="block mb-1.5 uppercase tracking-wide">Assoc. Job Category *</label>
+                      <select
+                        value={jobForm.category}
+                        onChange={(e) => setJobForm((p) => ({ ...p, category: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
                       >
-                        <option>Central Government Jobs</option>
-                        <option>State Government Jobs</option>
-                        <option>Railway Jobs</option>
-                        <option>Banking Jobs</option>
-                        <option>SSC Jobs</option>
-                        <option>UPSC Jobs</option>
-                        <option>Defence Jobs</option>
-                        <option>Teaching Jobs</option>
-                        <option>Medical Jobs</option>
+                        {JOB_CATS.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
                       </select>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block text-slate-400 font-bold mb-1">Brief Selection Criteria / Requirements (Full details View page)</label>
-                      <textarea 
-                        value={formRequirements} onChange={(e) => setFormRequirements(e.target.value)} rows={3}
-                        placeholder="Detailed requirements for the candidate to review..."
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2.5 text-white outline-none font-sans"
+                      <label className="block mb-1.5 uppercase tracking-wide">Jurisdiction State *</label>
+                      <select
+                        value={jobForm.state}
+                        onChange={(e) => setJobForm((p) => ({ ...p, state: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      >
+                        <option value="All India">All India (National Target)</option>
+                        {STATE_CARDS.map((st) => (
+                          <option key={st.name} value={st.name}>{st.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Total Vacated Positions Count *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., 17,727"
+                        required
+                        value={jobForm.vacancy}
+                        onChange={(e) => setJobForm((p) => ({ ...p, vacancy: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
                       />
                     </div>
+
                     <div>
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <label className="block text-slate-400 font-bold mb-1">Highlight Tag</label>
-                          <select 
-                            value={formTag} onChange={(e) => setFormTag(e.target.value as "" | "HOT" | "NEW")}
-                            className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white font-semibold outline-none"
-                          >
-                            <option value="">No tag badge</option>
-                            <option value="HOT">HOT (Blinking Red)</option>
-                            <option value="NEW">NEW (Saffron Slogan)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-slate-400 font-bold mb-1">Recruitment Job Location</label>
-                          <input 
-                            type="text" value={formLocation} onChange={(e) => setFormLocation(e.target.value)}
-                            placeholder="e.g. Uttar Pradesh"
-                            className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white font-semibold outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div className="bg-slate-900 p-2.5 rounded border border-slate-800 text-[10px] text-slate-500 flex justify-between items-center">
-                        <span>💡 Pre-fill this whole form instantly using the AI Generator tool under "Advanced" tab!</span>
-                      </div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Registration timeline Closing Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={jobForm.lastDate}
+                        onChange={(e) => setJobForm((p) => ({ ...p, lastDate: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
                     </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Minimum credentials Required *</label>
+                      <select
+                        value={jobForm.qual}
+                        onChange={(e) => setJobForm((p) => ({ ...p, qual: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      >
+                        {QUALS.map((q) => (
+                          <option key={q} value={q}>{q}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Remuneration Pay Scale / Salaries</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., ₹25,500 – ₹1,51,100"
+                        value={jobForm.salary}
+                        onChange={(e) => setJobForm((p) => ({ ...p, salary: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">General / OBC Fee</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., ₹100"
+                        value={jobForm.fee}
+                        onChange={(e) => setJobForm((p) => ({ ...p, fee: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">SC / ST Fee</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Free"
+                        value={jobForm.feeSC}
+                        onChange={(e) => setJobForm((p) => ({ ...p, feeSC: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Female Fee</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Free"
+                        value={jobForm.feeFemale}
+                        onChange={(e) => setJobForm((p) => ({ ...p, feeFemale: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Recruitment Status</label>
+                      <select
+                        value={jobForm.status}
+                        onChange={(e) => setJobForm((p) => ({ ...p, status: e.target.value as any }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      >
+                        <option value="active">Active (Currently Open)</option>
+                        <option value="draft">Draft (Invisible)</option>
+                        <option value="upcoming">Upcoming Alert</option>
+                        <option value="expired">Expired timeline</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Official Online Apply link</label>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={jobForm.applyLink}
+                        onChange={(e) => setJobForm((p) => ({ ...p, applyLink: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5 uppercase tracking-wide">Prospectus handbook PDF Announcement link</label>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={jobForm.notifLink}
+                        onChange={(e) => setJobForm((p) => ({ ...p, notifLink: e.target.value }))}
+                        className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs"
+                      />
+                    </div>
+
                   </div>
 
-                  <div className="flex gap-2.5 justify-end">
-                    <button 
-                      type="button" 
-                      onClick={() => setShowJobForm(false)}
-                      className="bg-slate-800 hover:bg-slate-750 text-slate-300 px-5 py-2 rounded text-xs font-semibold"
+                  {/* Desc area and AI Auto-generator button */}
+                  <div className="text-left select-none text-xs font-bold text-slate-600 font-sans">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="uppercase tracking-wide">Recruitment Statutory Handbook Description</label>
+                      <button
+                        type="button"
+                        onClick={handleAiGenerate}
+                        disabled={aiLoading}
+                        className="bg-[#003399] hover:bg-blue-800 text-yellow-350 text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all duration-155"
+                      >
+                        {aiLoading ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5 text-yellow-350" />
+                        )}
+                        <span>AI Document Generator</span>
+                      </button>
+                    </div>
+                    <textarea
+                      rows={6}
+                      placeholder="Enter operational rules, credentials checkpoints, dates index here..."
+                      value={jobForm.desc}
+                      onChange={(e) => setJobForm((p) => ({ ...p, desc: e.target.value }))}
+                      className="w-full bg-[#F8F9FF] border border-slate-200 p-4 rounded-xl outline-none font-semibold focus:border-[#FF6B00] transition text-slate-800 text-xs font-mono"
+                    />
+                  </div>
+
+                  {/* Hot / New Toggle Toggles */}
+                  <div className="flex flex-col sm:flex-row gap-6 p-4 bg-slate-50 border border-slate-150 rounded-xl max-w-xl text-left select-none">
+                    
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={jobForm.isHot}
+                        onChange={(e) => setJobForm((p) => ({ ...p, isHot: e.target.checked }))}
+                        className="w-4 h-4 text-[#FF6B00] focus:ring-orange-450 border-slate-350 rounded mt-0.5"
+                      />
+                      <div>
+                        <span className="block text-xs font-extrabold text-slate-800">Assign Premium High priority 🔥</span>
+                        <span className="text-[10px] text-slate-400 font-semibold">Will highlights inside Hot Naukri sidebar</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={jobForm.isNew}
+                        onChange={(e) => setJobForm((p) => ({ ...p, isNew: e.target.checked }))}
+                        className="w-4 h-4 text-[#FF6B00] focus:ring-orange-450 border-slate-350 rounded mt-0.5"
+                      />
+                      <div>
+                        <span className="block text-xs font-extrabold text-slate-800">Tag as New Launch ✨</span>
+                        <span className="text-[10px] text-slate-400 font-semibold">Blinks animated indicators for 5 days</span>
+                      </div>
+                    </label>
+
+                  </div>
+
+                  {/* Submission triggers */}
+                  <div className="border-t border-light pt-5 flex justify-end gap-3.5 select-none">
+                    <button
+                      type="button"
+                      onClick={() => setAdminPage("jobs")}
+                      className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-extrabold py-2.5 px-6 rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
-                    <button 
+                    <button
                       type="submit"
-                      className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-xs font-bold shadow-lg shadow-blue-950/20"
+                      className="bg-[#FF6B00] hover:bg-orange-600 text-white text-xs font-black uppercase tracking-wider py-2.5 px-7 rounded-xl shadow-md cursor-pointer"
                     >
-                      {formMode === "add" ? "Publish Job Advert ✔" : "Update Details ✔"}
+                      {editJobId ? "Save Configured Job" : "Publish Job Alert"}
                     </button>
                   </div>
-                </form>
-              )}
 
-              {/* LIST READ TABLE OF ALL RETRIEVED SARKARI RECORDS */}
-              <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
-                <div className="p-4 border-b border-slate-850 flex items-center justify-between">
-                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-500 font-baloo">Sarkari Job Database Registry ({filteredJobsList.length} items found)</h3>
-                  <span className="text-[10px] text-slate-400">Showing {filteredJobsList.length} entries matching filters</span>
+                </form>
+              </div>
+            )}
+
+            {/* SUB ROUTER VIEW: D) RESULTS DIRECTORY */}
+            {adminPage === "results" && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                      📋 Government Examinations results Directory
+                    </h2>
+                    <p className="text-xs text-slate-400 font-semibold">Manage, upload and declare candidate scores and intermediate selection indices.</p>
+                  </div>
+                  <button
+                    onClick={triggerAddResult}
+                    className="bg-[#FF6B00] hover:bg-orange-600 text-white text-xs px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-4.5 h-4.5" /> Publish Results Sheet
+                  </button>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900 text-slate-400 font-sans uppercase tracking-wider text-[10px]">
+                {/* Table representation */}
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-md">
+                  <table className="w-full text-left text-xs font-sans font-semibold">
+                    <thead className="bg-[#003399] text-white uppercase tracking-wider text-[9px]">
                       <tr>
-                        <th className="p-3.5 pl-5">Job Slogan & Department</th>
-                        <th className="p-3.5">Category Sector</th>
-                        <th className="p-3.5">Vacancies</th>
-                        <th className="p-3.5">Closing Date</th>
-                        <th className="p-3.5">Required Qualification</th>
-                        <th className="p-3.5 text-right pr-5">Quick Operations</th>
+                        <th className="p-4">Results Title</th>
+                        <th className="p-4">Authority Examination</th>
+                        <th className="p-4">Declaration Date</th>
+                        <th className="p-4">Publish status</th>
+                        <th className="p-4 text-center">Operation Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-900 text-slate-300 font-semibold">
-                      {filteredJobsList.map(job => (
-                        <tr key={job.id} className="hover:bg-slate-900/40 transition-colors">
-                          <td className="p-3.5 pl-5">
-                            <div className="flex items-center gap-1.5 font-bold text-white hover:text-blue-400 transition-colors cursor-pointer">
-                              <span>{job.title}</span>
-                              {job.tag && (
-                                <span className={`text-[8px] font-extrabold px-1 rounded uppercase ${job.tag === 'HOT' ? 'bg-rose-600 text-white animate-pulse' : 'bg-amber-500 text-white'}`}>
-                                  {job.tag}
-                                </span>
-                              )}
-                            </div>
-                            <span className="block text-[10px] text-slate-500 mt-0.5">🏢 Org: {job.department} | 📍 Code: {job.id}</span>
-                          </td>
-                          <td className="p-3.5 text-slate-400 font-mono text-[10px]">{job.jobType || "Central Government"}</td>
-                          <td className="p-3.5">
-                            <span className="text-emerald-400 font-extrabold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900">
-                              {job.vacancy}
+                    <tbody>
+                      {results.map((res) => (
+                        <tr key={res.id} className="border-b border-light/75 last:border-0 hover:bg-orange-50/15">
+                          <td className="p-4 font-bold text-slate-800">{res.title}</td>
+                          <td className="p-4 text-slate-500 font-bold">{res.exam}</td>
+                          <td className="p-4 text-[#003399] font-bold font-baloo">{res.date}</td>
+                          <td className="p-4">
+                            <span className={`text-[8px] uppercase font-black px-2 py-0.5 rounded-full border ${res.status === "published" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                              {res.status}
                             </span>
                           </td>
-                          <td className="p-3.5 font-mono text-rose-450">{job.lastDate}</td>
-                          <td className="p-3.5 font-sans text-xs">🎓 {job.qualification}</td>
-                          <td className="p-3.5 text-right pr-5">
-                            <div className="inline-flex gap-1">
-                              <button 
-                                type="button"
-                                onClick={() => generateSocialPreviews(job)}
-                                className="p-1 px-2.5 bg-slate-900 hover:bg-slate-800 text-[10px] text-teal-400 border border-slate-800 rounded font-bold hover:text-white transition-all flex items-center gap-1"
+                          <td className="p-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => triggerEditResult(res)}
+                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 p-2 rounded-lg cursor-pointer"
                               >
-                                <Share2 className="w-3.5 h-3.5" /> Share
+                                <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button 
-                                type="button"
-                                onClick={() => triggerEditJob(job)}
-                                className="p-1 text-blue-400 hover:text-white hover:bg-blue-950 rounded transition-colors"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                type="button"
-                                onClick={() => handleDeleteJob(job.id)}
-                                className="p-1 text-rose-500 hover:text-white hover:bg-rose-955 rounded transition-colors"
+                              <button
+                                onClick={() => handleDeleteResult(res.id)}
+                                className="bg-rose-100 hover:bg-rose-200 text-rose-700 p-2 rounded-lg cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1064,602 +1020,458 @@ export default function AdminPanel({
                   </table>
                 </div>
 
-                {filteredJobsList.length === 0 && (
-                  <div className="p-8 text-center text-slate-500">
-                    No records found matching current search queries or selectors.
-                  </div>
-                )}
               </div>
+            )}
 
-              {/* TELEGRAM AND WHATSAPP PREVIEW SECTION GENERATED ON-CLICK */}
-              {telegramFormat && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950 p-5 rounded-xl border border-slate-800 animate-scale-up">
+            {/* SUB ROUTER VIEW: E) ADMIT DIRECTORY */}
+            {adminPage === "admitcards" && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
-                    <h4 className="text-xs font-bold text-blue-400 flex items-center gap-2 uppercase mb-3">
-                      <Send className="w-4 h-4 text-sky-400" /> Telegram Channel broadcast draft Autoformatted
-                    </h4>
-                    <pre className="bg-slate-900 p-4 rounded text-[11px] font-mono whitespace-pre-wrap text-[#94a3b8] max-h-48 overflow-y-auto border border-slate-800 select-all"></pre>
-                    <div className="flex justify-between items-center mt-3">
-                      <span className="text-[10px] text-slate-500">Includes auto sitemap links</span>
-                      <button 
-                        onClick={() => { navigator.clipboard.writeText(telegramFormat); alert("Telegram draft copied!"); }}
-                        className="bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded flex items-center gap-1 transition-all"
-                      >
-                        <Copy className="w-3.5 h-3.5" /> Copy Telegram Post
-                      </button>
-                    </div>
+                    <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                      🪪 Exam Gate Passes & Admit Cards Directory
+                    </h2>
+                    <p className="text-xs text-slate-400 font-semibold">Post official links to fetch hall tickets, regional centers charts and schedules.</p>
                   </div>
-
-                  <div>
-                    <h4 className="text-xs font-bold text-emerald-450 flex items-center gap-2 uppercase mb-3">
-                      <Share2 className="w-4 h-4 text-emerald-400" /> WhatsApp Job Alerts Group Post draft
-                    </h4>
-                    <pre className="bg-slate-900 p-4 rounded text-[11px] font-mono whitespace-pre-wrap text-[#94a3b8] max-h-48 overflow-y-auto border border-slate-800 select-all"></pre>
-                    <div className="flex justify-between items-center mt-3">
-                      <span className="text-[10px] text-slate-500">Encouragement triggers</span>
-                      <button 
-                        onClick={() => { navigator.clipboard.writeText(whatsappFormat); alert("WhatsApp draft copied!"); }}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded flex items-center gap-1 transition-all"
-                      >
-                        <Copy className="w-3.5 h-3.5" /> Copy WhatsApp Post
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    onClick={triggerAddAdmit}
+                    className="bg-[#FF6B00] hover:bg-orange-600 text-white text-xs px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-4.5 h-4.5" /> Publish Admit Link
+                  </button>
                 </div>
-              )}
 
-            </div>
-          )}
-
-          {/* ==================== TAB 3: ALL INDIA STATES/UTs MANAGEMENT ==================== */}
-          {activeTab === "states" && (
-            <div className="space-y-6 select-none">
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider mb-2 text-rose-500 font-baloo">Indian States & Union Territories database</h3>
-                <p className="text-slate-400 text-xs mb-4">Set state-wise job vacancy counters. Users on the frontend will see this count update in real-time when browsing specific regional updates.</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {states.map(state => (
-                    <div 
-                      key={state.code} 
-                      className="bg-slate-900 p-4 rounded border border-slate-800 flex justify-between items-center gap-4 hover:border-slate-700 transition"
-                    >
-                      <div>
-                        <strong className="text-white text-xs block font-bold">{state.name}</strong>
-                        <span className="text-[10px] text-slate-500 block">Sarkari State Code: {state.code}</span>
-                      </div>
-                      
-                      {editingStateCode === state.code ? (
-                        <div className="flex items-center gap-1">
-                          <input 
-                            type="number" 
-                            className="bg-slate-950 border border-slate-800 rounded p-1 w-16 text-center text-xs text-white"
-                            value={stateQuotaCount} 
-                            onChange={(e) => setStateQuotaCount(parseInt(e.target.value) || 0)}
-                          />
-                          <button 
-                            onClick={() => handleUpdateStateQuota(state.code)}
-                            className="bg-green-600 hover:bg-green-500 p-1 rounded text-white"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-mono text-xs font-extrabold text-blue-400 bg-blue-950/30 px-2 py-0.5 rounded">
-                            {state.jobsCount} Posts
-                          </span>
-                          <button 
-                            onClick={() => { setEditingStateCode(state.code); setStateQuotaCount(state.jobsCount); }}
-                            className="text-slate-500 hover:text-white p-1 rounded hover:bg-slate-800 transition"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ==================== TAB 4: ADMIT CARDS & RESULTS MANAGERS ==================== */}
-          {activeTab === "content" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* ADMIT SHEET MANAGERS */}
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 flex flex-col justify-between">
-                <div>
-                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider mb-4 text-blue-400 font-baloo flex items-center gap-2">
-                    <Database className="w-4 h-4 text-blue-400" /> Admit Cards Sheet Release
-                  </h3>
-
-                  <form onSubmit={handleAddAdmit} className="space-y-3 bg-slate-900 p-4 rounded border border-slate-850 text-xs mb-4">
-                    <span className="block text-[10px] text-slate-400 font-bold uppercase">Rapid Publish Admit Card</span>
-                    <input 
-                      type="text" required placeholder="e.g. Bihar Police Constable PET Exam Admit Code"
-                      value={newAdmitTitle} onChange={(e) => setNewAdmitTitle(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none font-semibold"
-                    />
-                    <div className="flex gap-2">
-                      <select 
-                        value={newAdmitTag} onChange={(e) => setNewAdmitTag(e.target.value as "NEW" | "HOT" | "")}
-                        className="bg-slate-950 border border-slate-800 rounded p-2 w-32 outline-none font-semibold"
-                      >
-                        <option value="">No tag</option>
-                        <option value="HOT">HOT</option>
-                        <option value="NEW">NEW</option>
-                      </select>
-                      <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold p-2 rounded">
-                        Publish Admit Slip+
-                      </button>
-                    </div>
-                  </form>
-
-                  <div className="space-y-2.5 max-h-80 overflow-y-auto scroll-custom pr-1 text-xs">
-                    {admitCards.map((card, idx) => (
-                      <div key={idx} className="bg-slate-900 p-3 rounded flex items-center justify-between hover:bg-slate-850 transition">
-                        <div className="flex items-center gap-1.5 font-semibold text-slate-300">
-                          <span>{card.title}</span>
-                          {card.tag && (
-                            <span className={`text-[8px] font-extrabold px-1 rounded uppercase ${card.tag === "HOT" ? "bg-rose-600" : "bg-amber-500"} text-white`}>
-                              {card.tag}
+                {/* Table representation */}
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-md">
+                  <table className="w-full text-left text-xs font-sans font-semibold">
+                    <thead className="bg-[#003399] text-white uppercase tracking-wider text-[9px]">
+                      <tr>
+                        <th className="p-4">Document Title</th>
+                        <th className="p-4">Associated Exam</th>
+                        <th className="p-4">Exam Scheduled Date</th>
+                        <th className="p-4">Publish status</th>
+                        <th className="p-4 text-center">Operation Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {admits.map((adm) => (
+                        <tr key={adm.id} className="border-b border-light/75 last:border-0 hover:bg-orange-50/15">
+                          <td className="p-4 font-bold text-slate-800">{adm.title}</td>
+                          <td className="p-4 text-slate-500 font-bold">{adm.exam}</td>
+                          <td className="p-4 text-[#003399] font-bold font-baloo">{adm.examDate}</td>
+                          <td className="p-4">
+                            <span className={`text-[8px] uppercase font-black px-2 py-0.5 rounded-full border ${adm.status === "published" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                              {adm.status}
                             </span>
-                          )}
-                        </div>
-                        <button 
-                          onClick={() => { if (confirm("Delete this?")) setAdmitCards(admitCards.filter((_, i) => i !== idx)); }}
-                          className="text-slate-500 hover:text-rose-500 p-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => triggerEditAdmit(adm)}
+                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 p-2 rounded-lg cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteAdmit(adm.id)}
+                                className="bg-rose-100 hover:bg-rose-200 text-rose-700 p-2 rounded-lg cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
 
-              {/* LATEST RESULTS MANAGER */}
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 flex flex-col justify-between">
+              </div>
+            )}
+
+            {/* SUB ROUTER VIEW: F) SCROLLING TICKER MARQUEE */}
+            {adminPage === "ticker" && (
+              <div className="space-y-6">
                 <div>
-                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider mb-4 text-[#ff5a00] font-baloo flex items-center gap-2">
-                    <Radio className="w-4 h-4 text-orange-400" /> Declared Examination Results
-                  </h3>
+                  <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                    📡 Portal Scrolling Marquee Broadcasts
+                  </h2>
+                  <p className="text-xs text-slate-400 font-semibold">This alert ticker flashes at the top of the public website under live banners.</p>
+                </div>
 
-                  <form onSubmit={handleAddResult} className="space-y-3 bg-slate-900 p-4 rounded border border-slate-850 text-xs mb-4">
-                    <span className="block text-[10px] text-slate-400 font-bold uppercase">Rapid Publish Result Release</span>
-                    <input 
-                      type="text" required placeholder="e.g. UPSC Combined CSE (IAS) Mains qualifying merit list"
-                      value={newResultTitle} onChange={(e) => setNewResultTitle(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none font-semibold"
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md space-y-6 text-left select-none text-xs font-bold text-slate-600">
+                  
+                  {/* Live preview */}
+                  <div className="space-y-1.5">
+                    <label>Live Banner Preview Stream</label>
+                    <div className="bg-[#0a0f2e] text-yellow-350 p-3 rounded-xl overflow-hidden shadow-inner h-11 flex items-center">
+                      <marquee scrollamount="5" className="text-xs tracking-wide uppercase font-semibold">
+                        {tickerEdit}
+                      </marquee>
+                    </div>
+                  </div>
+
+                  {/* Textarea */}
+                  <div className="space-y-1.5">
+                    <label>Broadcast Notice Text stream</label>
+                    <textarea
+                      rows={4}
+                      value={tickerEdit}
+                      onChange={(e) => setTickerEdit(e.target.value)}
+                      className="w-full bg-[#F8F9FF] border border-slate-200 p-4 rounded-xl outline-none font-semibold focus:border-[#FF6B00] text-slate-800 text-xs tracking-wide uppercase"
                     />
-                    <div className="flex gap-2">
-                      <select 
-                        value={newResultTag} onChange={(e) => setNewResultTag(e.target.value as "NEW" | "HOT" | "")}
-                        className="bg-slate-950 border border-slate-800 rounded p-2 w-32 outline-none font-semibold"
-                      >
-                        <option value="">No tag</option>
-                        <option value="HOT">HOT</option>
-                        <option value="NEW">NEW</option>
-                      </select>
-                      <button type="submit" className="flex-1 bg-orange-600 hover:bg-orange-500 text-white font-bold p-2 rounded">
-                        Publish Result Scorecard+
-                      </button>
-                    </div>
-                  </form>
-
-                  <div className="space-y-2.5 max-h-80 overflow-y-auto scroll-custom pr-1 text-xs">
-                    {results.map((r, idx) => (
-                      <div key={idx} className="bg-slate-900 p-3 rounded flex items-center justify-between hover:bg-slate-850 transition">
-                        <div className="flex items-center gap-1.5 font-semibold text-slate-300">
-                          <span>{r.title}</span>
-                          {r.tag && (
-                            <span className={`text-[8px] font-extrabold px-1 rounded uppercase ${r.tag === "HOT" ? "bg-rose-600" : "bg-amber-500"} text-white`}>
-                              {r.tag}
-                            </span>
-                          )}
-                        </div>
-                        <button 
-                          onClick={() => { if (confirm("Delete this?")) setResults(results.filter((_, i) => i !== idx)); }}
-                          className="text-slate-500 hover:text-rose-500 p-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ==================== TAB 5: ADVANCED AI & DIRECT INDEXING TOOLS ==================== */}
-          {activeTab === "tools" && (
-            <div className="space-y-6">
-              
-              {/* PRIMARY ROW: AI GENERATOR & BRACKET INTEGRATOR */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                {/* AI AUTO JOB DESCRIPTION GENERATOR */}
-                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-400" />
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-indigo-400">AI Job Description Autogenerator</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Saves hours of formatting fees structures and recruitment age criteria</p>
-                    </div>
+                    <span className="text-[10px] text-slate-400 font-semibold block leading-normal mt-1">
+                      💡 Tip: Use a pipe operator | to beautifully separate distinct recruiting news bulletins.
+                    </span>
                   </div>
 
-                  <div className="space-y-3.5 text-xs pt-2">
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-bold">Broad Designation or Title Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Indian Navy Sailors Agniveer Entry, SSC GD Constable"
-                        value={aiJobTitle} 
-                        onChange={(e) => setAiJobTitle(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2.5 text-white font-semibold outline-none"
-                      />
-                    </div>
-                    
-                    <button 
-                      type="button" 
-                      onClick={handleAIGenerate}
-                      disabled={aiGenerating}
-                      className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-950 text-white font-bold p-2.5 rounded transition shadow-md shadow-indigo-955 flex items-center justify-center gap-2"
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSaveTicker}
+                      className="bg-[#FF6B00] hover:bg-orange-600 text-white text-xs font-black uppercase tracking-wider py-2.5 px-6 rounded-xl shadow-md cursor-pointer"
                     >
-                      {aiGenerating ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                          AI model parameters synthesizing...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4 text-indigo-300" />
-                          Draft Full Sarkari Job Details Structure 💫
-                        </>
-                      )}
+                      Save & Broadcast Live
                     </button>
-                    <span className="block text-[9px] text-slate-500 text-center leading-normal">Utilizes optimized schema matching structure with standard pay level matrices</span>
-                  </div>
-                </div>
-
-                {/* DIRECT PUSH NOTIFICATIONS BROADCASTER */}
-                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Radio className="w-5 h-5 text-rose-450 animate-pulse" />
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-500">Instant Alert Push Notification Center</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Push real-time alert broadcasts to registered subscribers</p>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handlePushSubmit} className="space-y-3 pt-2 text-xs">
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">Broadcaster Title</label>
-                      <input 
-                        type="text" required placeholder="e.g. UPSC Civil Services Prelims Exam Date Fixed!"
-                        value={pushTitle} onChange={(e) => setPushTitle(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">Broadcaster Message Synopsis</label>
-                      <textarea 
-                        rows={2} required placeholder="Click details to read whole age limits schema table, select exam centers..."
-                        value={pushBody} onChange={(e) => setPushBody(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-blue-500 rounded p-2 text-white outline-none"
-                      />
-                    </div>
-
-                    <button 
-                      type="submit"
-                      className="w-full bg-[#cc0000] hover:bg-rose-650 text-white font-bold p-2.5 rounded transition shadow"
+                    <button
+                      onClick={handleResetTicker}
+                      className="border border-[#e8192c] bg-white text-[#e8192c] hover:bg-rose-50 text-xs font-bold py-2.5 px-6 rounded-xl cursor-pointer"
                     >
-                      Broadcast Dynamic Alerts Slips (Browser + Applet) ⚡
-                    </button>
-
-                    {pushSuccess && (
-                      <div className="p-2 bg-emerald-950/60 border border-emerald-900 rounded text-emerald-400 text-center font-bold text-[10px]">
-                        Success! Alerts broadcasted successfully to 124,350 Active App Candidates.
-                      </div>
-                    )}
-                  </form>
-                </div>
-
-              </div>
-
-              {/* SECOND ROW: GOOGLE INDEXING SITEMAP AND BULK CSV MULTIPLIER */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                {/* SITEMAP XML GENERATOR */}
-                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-5 h-5 text-emerald-450" />
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-500">Google Indexing & sitemap.xml Builder</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Compliant to Google Search Console formats with priorities</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3.5 text-xs pt-2">
-                    <button 
-                      onClick={generateSitemap}
-                      disabled={sitemapLoading}
-                      className="w-full bg-slate-900 hover:bg-slate-850 text-slate-300 font-bold p-2 rounded border border-slate-800 transition flex items-center justify-center gap-2"
-                    >
-                      {sitemapLoading ? (
-                        <>
-                          <RefreshCw className="animate-spin text-slate-400" /> Building indices schema XML...
-                        </>
-                      ) : (
-                        "Generate XML Sitemap Map 🌍"
-                      )}
-                    </button>
-
-                    {sitemapGenerated && (
-                      <div className="space-y-2">
-                        <textarea 
-                          readOnly 
-                          value={sitemapGenerated} 
-                          rows={6}
-                          className="w-full bg-slate-900 p-2.5 rounded border border-slate-800 text-[9px] font-mono whitespace-pre text-slate-400 outline-none select-all"
-                        />
-                        <button 
-                          onClick={() => { navigator.clipboard.writeText(sitemapGenerated); alert("Sitemap copied to clipboard!"); }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-1 px-3 text-[10px] rounded"
-                        >
-                          Copy XML Output
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* BULK JOBS DATA CSV SHEET LOADER */}
-                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Database className="w-5 h-5 text-amber-500" />
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-500">Bulk Job Import CSV/XLS Simulator</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Publish hundreds of job categories at once using tables mapping</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 text-xs pt-2">
-                    <div className="border-2 border-dashed border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center bg-slate-900/40 select-none">
-                      <Upload className="w-8 h-8 text-slate-500 mb-2.5" />
-                      <span className="text-slate-400 text-xs font-bold font-sans">Select or Drag CSV Sheet here</span>
-                      <span className="text-[10px] text-slate-600 mt-1 block">Expected format: title, vacancy, lastDate, qualification, type</span>
-                      
-                      <input 
-                        type="file" 
-                        id="csvFile" 
-                        accept=".csv"
-                        className="hidden" 
-                        onChange={handleBulkSimulate}
-                      />
-                      <label 
-                        htmlFor="csvFile"
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-250 font-bold px-4 py-1.5 rounded mt-3.5 cursor-pointer leading-tight text-[11px]"
-                      >
-                        Browse Files
-                      </label>
-                    </div>
-
-                    {uploadedFileName && (
-                      <div className="p-2 border border-slate-800 rounded bg-slate-900/60 font-mono text-[10px] flex justify-between items-center text-slate-350">
-                        <span>📄 File Selected: {uploadedFileName}</span>
-                        <span className="text-emerald-400 font-bold">Parsed Ready</span>
-                      </div>
-                    )}
-
-                    {bulkImportCount !== null && (
-                      <div className="p-2.5 bg-emerald-950/60 border border-emerald-900 text-emerald-400 text-[10px] rounded font-semibold">
-                        ✔ Bulk Simulator successfully injected {bulkImportCount} new premium central & banking vacancies direct into registry lists.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* ==================== TAB 6: STAFF MEMBERS & USER ROLES ==================== */}
-          {activeTab === "users" && (
-            <div className="space-y-6">
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider mb-4 text-[#ff5a00] font-baloo flex items-center gap-2">
-                  <Users className="w-4 h-4 text-orange-400" /> Management Team & Permissions Panel
-                </h3>
-
-                {/* ADD NEW MEMBER CONTROL BOARD */}
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!newMemberName || !newMemberEmail) return;
-                    setTeamMembers([...teamMembers, {
-                      id: (teamMembers.length + 1).toString(),
-                      name: newMemberName,
-                      email: newMemberEmail,
-                      role: newMemberRole,
-                      statePermission: newMemberState
-                    }]);
-                    setNewMemberName("");
-                    setNewMemberEmail("");
-                  }}
-                  className="bg-slate-900 p-4 border border-slate-850 rounded-xl grid grid-cols-1 md:grid-cols-4 gap-3 text-xs mb-6 select-none"
-                >
-                  <div>
-                    <label className="block text-slate-400 font-bold mb-1">Staff Member Name</label>
-                    <input 
-                      type="text" required placeholder="Prakash Roy, etc"
-                      value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white font-semibold outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 font-bold mb-1">Official Email Account</label>
-                    <input 
-                      type="email" required placeholder="prakash@sarkari.co"
-                      value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white font-semibold outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 font-bold mb-1">System Role Target</label>
-                    <select 
-                      value={newMemberRole} onChange={(e) => setNewMemberRole(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white font-semibold outline-none"
-                    >
-                      <option>Admin</option>
-                      <option>Sub Admin</option>
-                      <option>Editor</option>
-                      <option>Content Writer</option>
-                      <option>State Manager</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <button type="submit" className="bg-[#cc0000] hover:bg-rose-700 text-white font-bold p-2.5 rounded transition">
-                      Invite Member+
+                      Reset Default
                     </button>
                   </div>
-                </form>
 
-                {/* THE USERS LIST REGISTRY */}
-                <div className="space-y-3 font-sans text-xs">
-                  {teamMembers.map((member) => (
-                    <div key={member.id} className="bg-slate-900 p-4 rounded-xl border border-slate-850 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div>
-                        <strong className="text-white text-sm font-bold block">{member.name}</strong>
-                        <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">{member.email}</span>
-                      </div>
-                      <div className="flex items-center gap-3 self-stretch sm:self-auto justify-between sm:justify-start">
-                        <span className="text-[10px] bg-indigo-950 border border-indigo-850 text-indigo-400 px-3 py-1 rounded-full font-bold">
-                          ⚜ {member.role}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold">District Limit Scope:</span>
-                          <span className="text-[10px] text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded font-bold border border-emerald-900">{member.statePermission}</span>
-                        </div>
-                        <button 
-                          onClick={() => { if (confirm(`Remove ${member.name}?`)) setTeamMembers(teamMembers.filter(t => t.id !== member.id)); }}
-                          className="text-slate-500 hover:text-rose-500 p-1 rounded"
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* SUB ROUTER VIEW: G) CONFIGURATION CONTROLS SETTINGS */}
+            {adminPage === "settings" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                    ⚙ Portal Configurations & Adsense Codes
+                  </h2>
+                  <p className="text-xs text-slate-400 font-semibold">Tweak identity labels and secure advertisement parameters across columns.</p>
                 </div>
 
-              </div>
-            </div>
-          )}
-
-          {/* ==================== TAB 7: GOOGLE ADSENSE & MONETIZATION MANAGER ==================== */}
-          {activeTab === "monetization" && (
-            <div className="space-y-6">
-              
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-6">
-                
-                <div className="flex items-center gap-2.5 pb-4 border-b border-slate-850 justify-between">
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-500 font-baloo flex items-center gap-2">
-                      <DollarSign className="w-5 h-5 text-emerald-450 animate-bounce" />
-                      Google AdSense Placement & Ad Server Configurations
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left select-none text-xs font-bold text-slate-600">
+                  
+                  {/* Branding */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md space-y-4">
+                    <h3 className="font-baloo text-[#003399] font-black text-sm uppercase tracking-wider border-b border-light pb-2">
+                      Portal Identity Mappings
                     </h3>
-                    <p className="text-[10.5px] text-slate-500 mt-1">Configure slot IDs, manage active monetization blocks across header, footer and details tables</p>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-lg border border-slate-800 select-none text-[10px]">
-                    <span className="text-slate-400">Main Monetization status:</span>
-                    <button 
-                      type="button"
-                      onClick={() => setAdSenseEnabled(!adSenseEnabled)}
-                      className={`px-3 py-1 rounded font-bold transition-all ${
-                        adSenseEnabled ? "bg-[#22c55e] text-white" : "bg-slate-800 text-slate-400"
-                      }`}
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block mb-1">Public Site Title</label>
+                        <input
+                          type="text"
+                          value={settingsForm.siteName}
+                          onChange={(e) => setSettingsForm((p) => ({ ...p, siteName: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold text-slate-800 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1">Branding Slogan Tagline</label>
+                        <input
+                          type="text"
+                          value={settingsForm.tagline}
+                          onChange={(e) => setSettingsForm((p) => ({ ...p, tagline: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold text-slate-800 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1">Admin Query Mail List</label>
+                        <input
+                          type="email"
+                          value={settingsForm.email}
+                          onChange={(e) => setSettingsForm((p) => ({ ...p, email: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold text-slate-800 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleSaveSettings}
+                      className="bg-[#003399] hover:bg-blue-800 text-white text-xs font-black uppercase tracking-wider py-2.5 px-6 rounded-xl transition cursor-pointer mt-2"
                     >
-                      {adSenseEnabled ? "ADSENSE LIVE STATUS" : "PAUSED ADSENSE"}
+                      Save Configurations
                     </button>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  {/* ADSENSE INTEGRATION CARD */}
-                  <div className="space-y-4 text-xs lg:col-span-2">
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-bold">Primary Pub ID Header Script Block (ca-pub-XXXXXXXXXXXXXXX)</label>
-                      <textarea 
-                        rows={6}
-                        value={adSenseCode} 
-                        onChange={(e) => setAdSenseCode(e.target.value)}
-                        placeholder="<!--Paste Sarkari Result Google AdSense Custom Embed Header Slots scripts here-->"
-                        className="w-full bg-slate-900 border border-slate-800 text-slate-400 font-mono text-[10px] p-2.5 rounded outline-none cursor-text"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-bold">Floating Sticky Footer Slogan Alert Banner Text</label>
-                      <input 
-                        type="text" 
-                        value={stickyAdText} 
-                        onChange={(e) => setStickyAdText(e.target.value)}
-                        placeholder="🔥 SPECIAL SCRIPT: Subscribe now for instant Sarkari WhatsApp alerts!"
-                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded outline-none font-semibold text-amber-400 text-xs"
-                      />
-                      <span className="block text-[9px] text-slate-500 mt-1.5 leading-normal">This floating sticky notification drives 90% of WhatsApp list recruitment conversions</span>
-                    </div>
                   </div>
 
-                  {/* ESTIMATED EARNINGS REALTIME CALCULATIONS */}
-                  <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-4 select-none self-start">
-                    <h4 className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                      <TrendingUp className="w-4 h-4 text-emerald-400" /> Daily Revenue Estimate Calculator
-                    </h4>
+                  {/* Adsense codes */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md space-y-4">
+                    <h3 className="font-baloo text-amber-600 font-black text-sm uppercase tracking-wider border-b border-light pb-2">
+                      Google AdSense Unit Mappings
+                    </h3>
                     
-                    <div className="space-y-3.5 pt-2">
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
-                        <span className="text-[10px] text-slate-400">Assumed CPM</span>
-                        <strong className="text-xs text-white font-mono">Rs. 180 / 1000 Views</strong>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block mb-1">Google Publisher Account ID (ca-pub-X)</label>
+                        <input
+                          type="text"
+                          value={settingsForm.pubId}
+                          onChange={(e) => setSettingsForm((p) => ({ ...p, pubId: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold text-slate-800 text-xs"
+                        />
                       </div>
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
-                        <span className="text-[10px] text-slate-400">Total Pageviews</span>
-                        <strong className="text-xs text-xs text-white font-mono">245,350 Today</strong>
+                      <div>
+                        <label className="block mb-1">Header Unit Slot ID Code</label>
+                        <input
+                          type="text"
+                          value={settingsForm.headerSlot}
+                          onChange={(e) => setSettingsForm((p) => ({ ...p, headerSlot: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold text-slate-800 text-xs"
+                        />
                       </div>
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
-                        <span className="text-[10px] text-slate-400">Assumed Ad CTR</span>
-                        <strong className="text-xs text-white font-mono">2.14%</strong>
-                      </div>
-                      <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-indigo-400 text-xs font-bold uppercase">Estimated Gross Today</span>
-                        <strong className="text-base text-emerald-400 font-extrabold font-mono">Rs. 44,163.00</strong>
+                      <div>
+                        <label className="block mb-1">Right sidebar unit Slot ID Code</label>
+                        <input
+                          type="text"
+                          value={settingsForm.sidebarSlot}
+                          onChange={(e) => setSettingsForm((p) => ({ ...p, sidebarSlot: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border border-slate-200 p-3 rounded-xl outline-none font-semibold text-slate-800 text-xs"
+                        />
                       </div>
                     </div>
-                    
-                    <div className="p-3 bg-slate-950 rounded-lg text-[9.5px] text-slate-500 leading-normal">
-                      Note: Real earnings are tracked live securely within your personal Google Analytics & AdSense consoles as configured.
-                    </div>
+
+                    <button
+                      onClick={handleSaveSettings}
+                      className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider py-2.5 px-6 rounded-xl transition cursor-pointer mt-2"
+                    >
+                      Save Ad Units Settings
+                    </button>
+
                   </div>
 
                 </div>
-
               </div>
+            )}
 
-            </div>
-          )}
-
-        </div>
+          </div>
+        )}
 
       </main>
 
+      {/* RENDER MODAL: DETACHED OVERLAY FORM FOR RESULTS */}
+      {resultModalOpen && (
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md shadow-2xl animate-fade-up overflow-hidden text-slate-800 font-sans">
+            <div className="bg-[#003399] text-white p-4 font-baloo flex justify-between items-center select-none">
+              <h3 className="font-extrabold text-sm uppercase tracking-wide">
+                {editResultId ? "✏ Edit Stat Result Record" : "➕ Publishes Exam Result Record"}
+              </h3>
+              <button onClick={() => setResultModalOpen(false)} className="text-white hover:opacity-85 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveResult} className="p-5 space-y-4 text-left select-none text-xs font-bold text-slate-600">
+              
+              <div>
+                <label className="block mb-1">Stat Result Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., SSC CHSL Level XII Scoring Result"
+                  value={resultForm.title}
+                  onChange={(e) => setResultForm((p) => ({ ...p, title: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Exam board Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., Stafford Commission CGL"
+                  value={resultForm.exam}
+                  onChange={(e) => setResultForm((p) => ({ ...p, exam: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Stat Declaration date</label>
+                <input
+                  type="date"
+                  value={resultForm.date}
+                  onChange={(e) => setResultForm((p) => ({ ...p, date: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Official Result PDF / Portal link *</label>
+                <input
+                  type="url"
+                  required
+                  value={resultForm.link}
+                  onChange={(e) => setResultForm((p) => ({ ...p, link: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">State Jurisdiction / Scope *</label>
+                <select
+                  value={resultForm.state}
+                  onChange={(e) => setResultForm((p) => ({ ...p, state: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                >
+                  <option value="All India">All India (Central Government)</option>
+                  {STATE_CARDS.map((st) => (
+                    <option key={st.name} value={st.name}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block mb-1">Record Status</label>
+                <select
+                  value={resultForm.status}
+                  onChange={(e) => setResultForm((p) => ({ ...p, status: e.target.value as any }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                >
+                  <option value="published">Published</option>
+                  <option value="draft">Draft (Invisible)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3.5 pt-3.5 border-t border-light">
+                <button
+                  type="button"
+                  onClick={() => setResultModalOpen(false)}
+                  className="border border-slate-200 py-2 px-5 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#FF6B00] hover:bg-orange-600 text-white py-2 px-5 rounded-xl shadow-md cursor-pointer"
+                >
+                  Save Result
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RENDER MODAL: DETACHED OVERLAY FORM FOR ADMIT CARDS */}
+      {admitModalOpen && (
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md shadow-2xl animate-fade-up overflow-hidden text-slate-800 font-sans">
+            <div className="bg-[#003399] text-white p-4 font-baloo flex justify-between items-center select-none">
+              <h3 className="font-extrabold text-sm uppercase tracking-wide">
+                {editAdmitId ? "✏ Edit Hall Ticket Record" : "➕ Publishes Exam Admit card Link"}
+              </h3>
+              <button onClick={() => setAdmitModalOpen(false)} className="text-white hover:opacity-85 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveAdmit} className="p-5 space-y-4 text-left select-none text-xs font-bold text-slate-600">
+              
+              <div>
+                <label className="block mb-1">Seat Pass Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., RRB ALP Stage-1 Admit cards"
+                  value={admitForm.title}
+                  onChange={(e) => setAdmitForm((p) => ({ ...p, title: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Associated Examination board *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., RRB Railways recruit Board"
+                  value={admitForm.exam}
+                  onChange={(e) => setAdmitForm((p) => ({ ...p, exam: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Exam Scheduled Date *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., June 22, 2025"
+                  value={admitForm.examDate}
+                  onChange={(e) => setAdmitForm((p) => ({ ...p, examDate: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Download Server Portal link *</label>
+                <input
+                  type="url"
+                  required
+                  value={admitForm.link}
+                  onChange={(e) => setAdmitForm((p) => ({ ...p, link: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">State Jurisdiction / Scope *</label>
+                <select
+                  value={admitForm.state}
+                  onChange={(e) => setAdmitForm((p) => ({ ...p, state: e.target.value }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                >
+                  <option value="All India">All India (Central Government)</option>
+                  {STATE_CARDS.map((st) => (
+                    <option key={st.name} value={st.name}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block mb-1">Record Status</label>
+                <select
+                  value={admitForm.status}
+                  onChange={(e) => setAdmitForm((p) => ({ ...p, status: e.target.value as any }))}
+                  className="w-full bg-[#F8F9FF] border border-slate-200 p-2.5 rounded-xl outline-none text-slate-800"
+                >
+                  <option value="published">Published</option>
+                  <option value="draft">Draft (Invisible)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3.5 pt-3.5 border-t border-light">
+                <button
+                  type="button"
+                  onClick={() => setAdmitModalOpen(false)}
+                  className="border border-slate-200 py-2 px-5 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#FF6B00] hover:bg-orange-600 text-white py-2 px-5 rounded-xl shadow-md cursor-pointer"
+                >
+                  Save Entry
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
-}
+};
+
+// Reusable standard modal, close triggers, edit rows etc.
+interface X {}
