@@ -73,6 +73,9 @@ export const AdminPanel: React.FC = () => {
   // AI generator spinning loader
   const [aiLoading, setAiLoading] = useState(false);
 
+  // Live Auto-Sync FAQs changes to structured JSON-LD Schema
+  const [faqAutoSync, setFaqAutoSync] = useState(true);
+
   // 1. Dashboard calculations
   const totalJobs = jobs.length;
   const activeJobsCount = jobs.filter((j) => j.status === "active").length;
@@ -188,6 +191,160 @@ export const AdminPanel: React.FC = () => {
       addToast("✨ AI Recruitment Announcement generated properly!", "success");
     }, 1200);
   };
+
+  // Automated FAQ JSON-LD script dynamic builder & merger
+  const handleCompileFaqSchema = (customFaqs?: any[]) => {
+    const faqsToUse = customFaqs || jobForm.faq || [];
+    const activeFaqs = faqsToUse.filter((f: any) => f.question && f.answer && f.question.trim() !== "" && f.answer.trim() !== "");
+    
+    if (activeFaqs.length === 0) {
+      if (!customFaqs) {
+        addToast("⚠ Insert valid Question and Answer pairs first!", "warn");
+      }
+      return;
+    }
+
+    const faqSchema = {
+      "@type": "FAQPage",
+      "mainEntity": activeFaqs.map((f: any) => ({
+        "@type": "Question",
+        "name": f.question.trim(),
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": f.answer.trim()
+        }
+      }))
+    };
+
+    const currentSchemaString = jobForm.seo?.structuredDataSchema || "";
+    let updatedSchema = "";
+
+    try {
+      let parsed: any = null;
+      if (currentSchemaString && currentSchemaString.trim() !== "") {
+        parsed = JSON.parse(currentSchemaString);
+      }
+
+      if (!parsed) {
+        // Create fresh FAQ Page JSON-LD schema
+        updatedSchema = JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": faqSchema.mainEntity
+        }, null, 2);
+      } else if (Array.isArray(parsed)) {
+        // Handle array schemas
+        const filtered = parsed.filter((item: any) => item["@type"] !== "FAQPage");
+        const faqWithContext = { "@context": "https://schema.org", ...faqSchema };
+        updatedSchema = JSON.stringify([...filtered, faqWithContext], null, 2);
+      } else if (parsed["@graph"] && Array.isArray(parsed["@graph"])) {
+        // Handle @graph schema arrays
+        const filteredGraph = parsed["@graph"].filter((item: any) => item["@type"] !== "FAQPage");
+        filteredGraph.push(faqSchema);
+        parsed["@graph"] = filteredGraph;
+        updatedSchema = JSON.stringify(parsed, null, 2);
+      } else if (typeof parsed === "object") {
+        if (parsed["@type"] === "FAQPage") {
+          parsed.mainEntity = faqSchema.mainEntity;
+          updatedSchema = JSON.stringify(parsed, null, 2);
+        } else {
+          // Convert single schema target (e.g., JobPosting) into a unified @graph array
+          const cleanJobPosting = { ...parsed };
+          delete cleanJobPosting["@context"];
+          
+          updatedSchema = JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              cleanJobPosting,
+              faqSchema
+            ]
+          }, null, 2);
+        }
+      } else {
+        updatedSchema = currentSchemaString;
+      }
+    } catch (e) {
+      // JSON syntax issue, overwrite with fresh FAQ page
+      updatedSchema = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": faqSchema.mainEntity
+      }, null, 2);
+    }
+
+    setJobForm(p => ({
+      ...p,
+      seo: {
+        ...(p.seo || { metaTitle: "", metaDesc: "", focusKeywords: "", structuredDataSchema: "" }),
+        structuredDataSchema: updatedSchema
+      }
+    }));
+    
+    if (!customFaqs) {
+      addToast("⚡ Automated Google-friendly FAQ schema compiled & injected successfully!", "success");
+    }
+  };
+
+  const getFaqSchemaStatus = () => {
+    const activeFaqs = (jobForm.faq || []).filter((f: any) => f.question && f.answer && f.question.trim() !== "" && f.answer.trim() !== "");
+    if (activeFaqs.length === 0) return { status: "empty", label: "No Active FAQ items to index", color: "text-slate-400 font-sans" };
+
+    const schemaStr = jobForm.seo?.structuredDataSchema || "";
+    if (!schemaStr.trim()) return { status: "missing", label: "FAQ Schema missing from Structured Data", color: "text-amber-500 font-extrabold animate-pulse" };
+
+    try {
+      const parsed = JSON.parse(schemaStr);
+      let faqObj: any = null;
+
+      if (Array.isArray(parsed)) {
+        faqObj = parsed.find((item: any) => item["@type"] === "FAQPage");
+      } else if (parsed["@graph"] && Array.isArray(parsed["@graph"])) {
+        faqObj = parsed["@graph"].find((item: any) => item["@type"] === "FAQPage");
+      } else if (parsed["@type"] === "FAQPage") {
+        faqObj = parsed;
+      }
+
+      if (!faqObj || !faqObj.mainEntity || !Array.isArray(faqObj.mainEntity)) {
+        return { status: "missing", label: "FAQ Schema missing from Structured Data", color: "text-amber-500 font-extrabold animate-pulse" };
+      }
+
+      const schemaFaqs = faqObj.mainEntity.map((item: any) => ({
+        question: item.name || "",
+        answer: item.acceptedAnswer?.text || ""
+      }));
+
+      if (schemaFaqs.length !== activeFaqs.length) {
+        return { status: "divergent", label: "Structured Schema out of sync with current FAQs", color: "text-rose-500 font-bold" };
+      }
+
+      for (let i = 0; i < activeFaqs.length; i++) {
+        if ((activeFaqs[i].question || "").trim() !== (schemaFaqs[i].question || "").trim() || 
+            (activeFaqs[i].answer || "").trim() !== (schemaFaqs[i].answer || "").trim()) {
+          return { status: "divergent", label: "Structured Schema out of sync with current FAQs", color: "text-rose-500 font-bold" };
+        }
+      }
+
+      return { status: "synchronized", label: "✓ Google FAQ Schema fully synchronized with FAQ list", color: "text-emerald-600 font-bold font-mono" };
+    } catch (e) {
+      return { status: "invalid", label: "⚠️ Invalid Structured Data JSON format (syntax error)", color: "text-red-500 font-bold" };
+    }
+  };
+
+  const serializedFaqs = React.useMemo(() => {
+    return JSON.stringify((jobForm.faq || []).map((f: any) => ({
+      q: (f.question || "").trim(),
+      a: (f.answer || "").trim()
+    })));
+  }, [jobForm.faq]);
+
+  React.useEffect(() => {
+    if (faqAutoSync) {
+      const activeFaqs = (jobForm.faq || []).filter((f: any) => f.question && f.answer && f.question.trim() !== "" && f.answer.trim() !== "");
+      if (activeFaqs.length > 0) {
+        handleCompileFaqSchema(jobForm.faq);
+      }
+    }
+  }, [serializedFaqs, faqAutoSync]);
 
   // CRUD Job publisher
   const handleSaveJob = (e: React.FormEvent) => {
@@ -381,6 +538,105 @@ export const AdminPanel: React.FC = () => {
         j.state.toLowerCase().includes(q)
     );
   }, [jobs, jobsSearch]);
+
+  const isAuthorized = currentUser && currentUser.email === "prokashmal799@gmail.com";
+
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen w-full bg-[#081229] flex flex-col items-center justify-center p-4 text-white relative overflow-hidden select-none">
+        {/* Subtle decorative security grids */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(0,51,153,0.15),transparent)] pointer-events-none" />
+        <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:14px_24px] pointer-events-none" />
+
+        {/* Top header replica for branding consistency */}
+        <div className="absolute top-0 left-0 right-0 h-11 bg-[#cc0000] border-b border-red-800 flex items-center justify-center px-4 shadow-md">
+          <span className="font-extrabold text-[10px] tracking-widest font-mono text-white opacity-95">
+            {siteSettings.siteName.toUpperCase()} &bull; SARKARI SECURE SUPER ADMIN CENTER
+          </span>
+        </div>
+
+        <div className="w-full max-w-sm bg-[#0e1938] border border-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10 text-center">
+          <div className="mx-auto w-14 h-14 bg-red-950/40 border-2 border-red-500/80 rounded-full flex items-center justify-center mb-5 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+            <Shield className="w-7 h-7 stroke-[2.5]" />
+          </div>
+
+          <h2 className="text-xl sm:text-2xl font-black font-sans tracking-tight text-white uppercase">
+            Restricted Admin Area
+          </h2>
+          <p className="text-[10px] text-slate-400 font-semibold tracking-wide uppercase mt-1.5 font-sans">
+            Authentication Required
+          </p>
+
+          <p className="text-slate-300 text-xs mt-4 leading-relaxed font-sans max-w-xs mx-auto">
+            This module contains executive database tools, real-time metrics, system schema compilers, and broadcast services.
+          </p>
+
+          <div className="my-6 border-t border-slate-800/60 pt-4 pb-1">
+            {currentUser ? (
+              <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-3 text-left">
+                <p className="text-[10px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                  Currently Logged In:
+                </p>
+                <p className="text-xs font-mono font-bold text-red-450 mt-1.5 truncate">
+                  {currentUser.email}
+                </p>
+                <p className="text-[9px] text-slate-400 mt-1.5 leading-normal font-sans">
+                  ⚠ This account has not been granted administrative write access. Log in with the registered admin credentials to proceed.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-slate-900/40 border border-slate-800/50 rounded-xl p-3 text-left">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                  Authorization Status:
+                </p>
+                <p className="text-xs font-semibold text-slate-300 mt-1.5 font-sans flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping" />
+                  Waiting for secure authorization session...
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {currentUser ? (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={logoutAdmin}
+                  className="bg-slate-900 hover:bg-slate-850 text-white font-black text-xs font-sans tracking-wide uppercase px-4 py-3 rounded-xl border border-slate-750 transition cursor-pointer active:scale-95 shadow-md flex items-center justify-center gap-1.5"
+                >
+                  Sign Out
+                </button>
+                <button
+                  type="button"
+                  onClick={loginWithGoogle}
+                  className="bg-indigo-600 hover:bg-indigo-750 text-white font-black text-xs font-sans tracking-wide uppercase px-4 py-3 rounded-xl shadow-md transition cursor-pointer active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  Switch User
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={loginWithGoogle}
+                className="w-full bg-[#1e40af] hover:bg-blue-700 text-white font-black text-xs font-sans tracking-wide uppercase py-3 px-4 rounded-xl shadow-md cursor-pointer transition active:scale-95 flex items-center justify-center gap-2 border border-blue-500 animate-pulse duration-1000"
+              >
+                🔑 Authenticate With Google
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setView("site")}
+              className="w-full bg-slate-900/50 hover:bg-slate-950 text-slate-400 hover:text-white font-extrabold text-[11px] font-sans tracking-wide uppercase py-2.5 px-4 rounded-xl border border-slate-800/60 transition cursor-pointer active:scale-95"
+            >
+              Return To Live Site
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#F0F4FF] overflow-hidden text-slate-800 font-sans">
@@ -1211,6 +1467,42 @@ export const AdminPanel: React.FC = () => {
 
                     {/* FAQ Builder Panel */}
                     <div className="space-y-4 text-xs">
+
+                      {/* Interactive JSON-LD FAQ Compiler Integration Control Card */}
+                      <div className="bg-[#f0f4ff] border border-[#dbeafe] rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 select-none">
+                        <div className="space-y-1">
+                          <span className="flex items-center gap-1.5 text-xs font-black text-slate-800 uppercase tracking-wide">
+                            <span className="animate-pulse text-indigo-600">⚡</span> Google Rich Snippet FAQ Schema Tool
+                          </span>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            Automatically parses and formats your dynamic FAQ list into a valid JSON-LD structure.
+                          </p>
+                          <div className="flex items-center gap-2 pt-1 font-sans">
+                            <span className="text-[10px] font-bold text-slate-600">Status:</span>
+                            <span className={`text-[10px] ${getFaqSchemaStatus().color}`}>
+                              {getFaqSchemaStatus().label}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded-lg text-[10px] font-extrabold text-slate-700 hover:bg-slate-50 transition shadow-sm">
+                            <input
+                              type="checkbox"
+                              checked={faqAutoSync}
+                              onChange={(e) => setFaqAutoSync(e.target.checked)}
+                              className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 border-slate-350 rounded pointer-events-auto"
+                            />
+                            <span>Live Auto-Sync</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleCompileFaqSchema()}
+                            className="bg-indigo-600 hover:bg-indigo-700 font-sans text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Compile & Merge Schema</span>
+                          </button>
+                        </div>
+                      </div>
                       <div className="flex justify-between items-center pb-2 border-b border-indigo-100">
                         <div>
                           <span className="block text-xs font-black text-slate-800 uppercase tracking-wide">📑 Dynamic FAQ Accorder List ({jobForm.faq?.length || 0})</span>

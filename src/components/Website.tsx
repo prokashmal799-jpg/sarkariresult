@@ -22,6 +22,9 @@ export interface AppContextType {
   pushAlerts: PushNotificationAlert[];
   setPushAlerts: React.Dispatch<React.SetStateAction<PushNotificationAlert[]>>;
   sendPushAlertToClient: (title: string, body: string, category: string, url?: string) => void;
+  currentUser: any;
+  loginWithGoogle: () => Promise<void>;
+  logoutAdmin: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -32,7 +35,8 @@ export const Website: React.FC = () => {
 
   const { 
     jobs, results, admits, ticker, siteSettings, setView, addToast,
-    pushSubscription, setPushSubscription, pushAlerts, setPushAlerts, sendPushAlertToClient
+    pushSubscription, setPushSubscription, pushAlerts, setPushAlerts, sendPushAlertToClient,
+    currentUser, loginWithGoogle, logoutAdmin
   } = context;
 
   // Local navigation state
@@ -117,8 +121,56 @@ export const Website: React.FC = () => {
     }, 1000);
     return () => clearInterval(timerTick);
   }, []);
+
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [showStateSelectorModal, setShowStateSelectorModal] = useState(false);
+
+  // Dynamically inject Google structured JSON-LD Script tag to document head on the fly!
+  useEffect(() => {
+    const removeExisting = () => {
+      const el = document.getElementById("dynamic-sarkari-jsonld");
+      if (el) el.remove();
+    };
+
+    if (sitePage === "job" && selectedJob) {
+      removeExisting();
+
+      // Get schema data
+      let schemaText = selectedJob.seo?.structuredDataSchema || "";
+      if (!schemaText) {
+        // Fallback default JobPosting rich microdata schema
+        schemaText = JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "JobPosting",
+          "title": selectedJob.title,
+          "hiringOrganization": {
+            "@type": "Organization",
+            "name": selectedJob.org,
+            "sameAs": selectedJob.applyLink || "https://sarkariresultlive.in"
+          },
+          "datePosted": selectedJob.created?.split("T")[0] || "2026-05-30",
+          "validThrough": selectedJob.lastDate,
+          "description": selectedJob.desc || `${selectedJob.title} announced by ${selectedJob.org}.`
+        }, null, 2);
+      }
+
+      try {
+        const script = document.createElement("script");
+        script.id = "dynamic-sarkari-jsonld";
+        script.type = "application/ld+json";
+        script.textContent = schemaText;
+        document.head.appendChild(script);
+      } catch (err) {
+        console.warn("Failed to inject JSON-LD script into document head:", err);
+      }
+    } else {
+      removeExisting();
+    }
+
+    return () => {
+      removeExisting();
+    };
+  }, [sitePage, selectedJob]);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -673,18 +725,41 @@ export const Website: React.FC = () => {
               <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#ffde00]" />
               <span>{selectedState || "Select State"} ▼</span>
             </button>
-            <button
-              onClick={() => setView("admin")}
-              className="flex bg-[#ffde00] text-[#022a7e] hover:bg-[#ffe633] px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black tracking-wider uppercase transition-all duration-150 shadow-md cursor-pointer items-center gap-1 border border-[#ffde00] active:scale-95"
-            >
-              ⚙️ <span className="hidden xs:inline">Super</span> Admin
-            </button>
-            <button
-              onClick={() => addToast("Secure candidate portal login is scheduled in release 2.4", "warn")}
-              className="hidden md:block bg-white/10 hover:bg-white/20 text-white border border-white/30 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition-all duration-150 cursor-pointer active:scale-95"
-            >
-              Login
-            </button>
+            {currentUser?.email === "prokashmal799@gmail.com" && (
+              <button
+                onClick={() => setView("admin")}
+                className="flex bg-[#ffde00] text-[#022a7e] hover:bg-[#ffe633] px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black tracking-wider uppercase transition-all duration-150 shadow-md cursor-pointer items-center gap-1 border border-[#ffde00] active:scale-95"
+              >
+                ⚙️ <span className="hidden xs:inline">Super</span> Admin
+              </button>
+            )}
+            {currentUser ? (
+              <div className="hidden md:flex items-center gap-2 bg-white/10 border border-white/20 pl-2.5 pr-3 py-1.5 rounded-xl text-white select-none">
+                <div className="w-5 h-5 rounded-full bg-[#ffde00] text-[#022a7e] font-black text-[9px] flex items-center justify-center border border-white shrink-0 overflow-hidden uppercase">
+                  {currentUser.photoURL ? (
+                    <img src={currentUser.photoURL} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    currentUser.email?.slice(0, 2)
+                  )}
+                </div>
+                <span className="text-[10px] font-bold truncate max-w-[80px]" title={currentUser.email}>
+                  {currentUser.displayName || currentUser.email?.split("@")[0]}
+                </span>
+                <button
+                  onClick={logoutAdmin}
+                  className="ml-2 bg-red-600/30 hover:bg-red-650 border border-red-500/20 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider transition cursor-pointer"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={loginWithGoogle}
+                className="hidden md:block bg-white/10 hover:bg-white/20 text-white border border-white/30 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition-all duration-150 cursor-pointer active:scale-95"
+              >
+                Login
+              </button>
+            )}
           </div>
         </div>
       </header>
