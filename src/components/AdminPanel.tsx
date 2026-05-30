@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useContext } from "react";
+import React, { useState, useMemo, useContext, useEffect } from "react";
 import { 
   Plus, Edit2, Trash2, LayoutDashboard, Briefcase, FileText, 
   Settings, ArrowLeft, Terminal, Sparkles, Check, CheckCircle, 
@@ -9,7 +9,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
   Tooltip, Cell, AreaChart, Area 
 } from "recharts";
-import { Job, ExamResult, AdmitCard, SiteSettings } from "../types";
+import { Job, ExamResult, AdmitCard, SiteSettings, StateSocialMap } from "../types";
 import { AppContext } from "./Website";
 import { JOB_CATS, STATE_CARDS, QUALS } from "../data";
 
@@ -18,7 +18,7 @@ export const AdminPanel: React.FC = () => {
   if (!context) return null;
 
   const { 
-    jobs, results, admits, ticker, siteSettings, setView, addToast, isLoading,
+    jobs, results, admits, ticker, siteSettings, stateSocials, setView, addToast, isLoading,
     pushSubscription, setPushSubscription, pushAlerts, setPushAlerts, sendPushAlertToClient
   } = context;
 
@@ -33,6 +33,7 @@ export const AdminPanel: React.FC = () => {
   const setAdmits = (context as any).setAdmitCards; // From app.tsx state mappings
   const setTicker = (context as any).setTicker;
   const setSiteSettings = (context as any).setSiteSettings;
+  const setStateSocials = (context as any).setStateSocials;
 
   // Sidebar collapsed state
   const [collapsed, setCollapsed] = useState(false);
@@ -156,7 +157,8 @@ export const AdminPanel: React.FC = () => {
       status: "active",
       isHot: false,
       isNew: true,
-      desc: ""
+      desc: "",
+      customFields: []
     });
     setAdminPage("add-job");
   };
@@ -166,6 +168,7 @@ export const AdminPanel: React.FC = () => {
     setJobForm({
       ...job,
       faq: job.faq || [],
+      customFields: job.customFields || [],
       seo: job.seo || {
         metaTitle: "",
         metaDesc: "",
@@ -520,6 +523,19 @@ export const AdminPanel: React.FC = () => {
 
   // 6. Settings controls
   const [settingsForm, setSettingsForm] = useState<SiteSettings>({ ...siteSettings });
+  const [socialsForm, setSocialsForm] = useState<StateSocialMap>({ ...stateSocials });
+  const [socialsSearch, setSocialsSearch] = useState("");
+
+  useEffect(() => {
+    if (stateSocials && Object.keys(stateSocials).length > 0) {
+      setSocialsForm(stateSocials);
+    }
+  }, [stateSocials]);
+
+  const handleSaveSocials = () => {
+    setStateSocials(socialsForm);
+    addToast("📱 State-wise social channels updated successfully!", "success");
+  };
 
   const handleSaveSettings = () => {
     setSiteSettings(settingsForm);
@@ -1580,6 +1596,87 @@ export const AdminPanel: React.FC = () => {
                       )}
                     </div>
 
+                    {/* Dynamic Custom Fields Panel */}
+                    <div className="space-y-4 text-xs pt-4 border-t border-slate-200">
+                      <div className="flex justify-between items-center pb-2 border-b border-indigo-150">
+                        <div>
+                          <span className="block text-xs font-black text-slate-800 uppercase tracking-wide">💼 Dynamic Custom Fields ({jobForm.customFields?.length || 0})</span>
+                          <span className="text-[10px] text-slate-400 font-semibold text-left">Add any brand new custom fields to list specific facts or parameters for this job post.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentFields = jobForm.customFields || [];
+                            setJobForm(p => ({
+                              ...p,
+                              customFields: [...currentFields, { key: "", value: "" }]
+                            }));
+                          }}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-sm cursor-pointer transition"
+                        >
+                          + Add Custom Field
+                        </button>
+                      </div>
+
+                      {(!jobForm.customFields || jobForm.customFields.length === 0) ? (
+                        <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-[11px] text-slate-400 font-medium">
+                          No custom fields added yet. Click "+ Add Custom Field" above to add any custom data to this job post.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto pr-1">
+                          {jobForm.customFields.map((field, index) => (
+                            <div key={index} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5 relative">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedFields = (jobForm.customFields || []).filter((_, i) => i !== index);
+                                  setJobForm(p => ({ ...p, customFields: updatedFields }));
+                                }}
+                                className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition"
+                                title="Remove Custom Field"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                              
+                              <div className="grid grid-cols-1 gap-2 pt-2">
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Field Name / Label</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Admit Card Out Date, Selection Process, Exam Pattern..."
+                                    value={field.key}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const updated = [...(jobForm.customFields || [])];
+                                      updated[index] = { ...updated[index], key: val };
+                                      setJobForm(p => ({ ...p, customFields: updated }));
+                                    }}
+                                    className="w-full bg-white border border-slate-200 p-2 rounded-lg outline-none font-semibold focus:border-indigo-500 text-slate-800 text-xs"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Field Description / Value</label>
+                                  <textarea
+                                    rows={2}
+                                    placeholder="e.g. 5th June 2026, Written Exam (100 Marks) followed by Interview..."
+                                    value={field.value}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const updated = [...(jobForm.customFields || [])];
+                                      updated[index] = { ...updated[index], value: val };
+                                      setJobForm(p => ({ ...p, customFields: updated }));
+                                    }}
+                                    className="w-full bg-white border border-slate-200 p-2 rounded-lg outline-none font-semibold focus:border-indigo-500 text-slate-800 text-xs"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
 
                   {/* Submission triggers */}
@@ -1893,6 +1990,103 @@ export const AdminPanel: React.FC = () => {
                   </div>
 
                 </div>
+
+                {/* FULL WIDTH: State-Wise WhatsApp & Telegram Group Channels Manager */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md space-y-6 text-left">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                      <h3 className="font-baloo text-[#003399] font-black text-sm uppercase tracking-wider">
+                        📱 State-Wise Social Channel Links (WhatsApp & Telegram)
+                      </h3>
+                      <p className="text-[10px] text-slate-400 font-semibold">Manage real, distinct WhatsApp groups and Telegram joining channels for every individual state or territory.</p>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 select-none">
+                      {/* Search Bar */}
+                      <div className="relative w-full sm:w-56">
+                        <input
+                          type="text"
+                          placeholder="Search State..."
+                          value={socialsSearch}
+                          onChange={(e) => setSocialsSearch(e.target.value)}
+                          className="bg-[#F8F9FF] border border-slate-200 pl-8 pr-3 py-1.5 rounded-lg outline-none font-semibold text-slate-800 text-[11px] w-full"
+                        />
+                        <span className="absolute left-2.5 top-2.5 text-slate-400 text-xs text-left">🔍</span>
+                      </div>
+                      <button
+                        onClick={handleSaveSocials}
+                        className="bg-[#FF6B00] hover:bg-orange-600 text-white text-[11px] font-black uppercase tracking-wider py-1.5 px-4 rounded-lg transition cursor-pointer shrink-0 shadow-sm"
+                      >
+                        Save All Socials
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 max-h-[450px] overflow-y-auto pr-1">
+                    {/* Display All India first options, then all individual states */}
+                    {["All India", ...STATE_CARDS.map(s => s.name)]
+                      .filter(stateName => !socialsSearch || stateName.toLowerCase().includes(socialsSearch.toLowerCase()))
+                      .map((stateName) => {
+                        const item = socialsForm[stateName] || { whatsappUrl: "", telegramUrl: "" };
+                        return (
+                          <div key={stateName} className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                            <div className="text-left shrink-0 min-w-[120px]">
+                              <span className="bg-[#003399] text-white text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-full block text-center max-w-fit mb-1 shadow-sm leading-normal">
+                                {stateName === "All India" ? "ALL" : STATE_CARDS.find(s => s.name === stateName)?.short || "ST"}
+                              </span>
+                              <h4 className="font-baloo text-xs font-black text-slate-800 leading-none">
+                                {stateName}
+                              </h4>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">WhatsApp Invite Link</label>
+                                <input
+                                  type="url"
+                                  placeholder="https://chat.whatsapp.com/..."
+                                  value={item.whatsappUrl || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSocialsForm(p => ({
+                                      ...p,
+                                      [stateName]: { ...item, whatsappUrl: val }
+                                    }));
+                                  }}
+                                  className="w-full bg-white border border-slate-200 p-2 rounded-lg outline-none font-semibold text-slate-800 text-[11px] focus:border-[#FF6B00]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-550 uppercase tracking-wider mb-1">Telegram Join Link</label>
+                                <input
+                                  type="url"
+                                  placeholder="https://t.me/..."
+                                  value={item.telegramUrl || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSocialsForm(p => ({
+                                      ...p,
+                                      [stateName]: { ...item, telegramUrl: val }
+                                    }));
+                                  }}
+                                  className="w-full bg-white border border-slate-200 p-2 rounded-lg outline-none font-semibold text-slate-800 text-[11px] focus:border-[#FF6B00]"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-slate-100 select-none">
+                    <button
+                      onClick={handleSaveSocials}
+                      className="bg-[#003399] hover:bg-blue-800 text-white text-xs font-black uppercase tracking-wider py-2.5 px-6 rounded-xl shadow-md transition cursor-pointer"
+                    >
+                      Save All Social Channels
+                    </button>
+                  </div>
+                </div>
+
               </div>
             )}
 

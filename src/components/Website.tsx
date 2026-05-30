@@ -4,7 +4,7 @@ import {
   GraduationCap, Clock, AlertTriangle, ChevronRight, Menu, X, 
   Printer, Share2, ArrowLeft, Copy, Download, ExternalLink 
 } from "lucide-react";
-import { Job, ExamResult, AdmitCard, SiteSettings, PushNotificationSetting, PushNotificationAlert } from "../types";
+import { Job, ExamResult, AdmitCard, SiteSettings, PushNotificationSetting, PushNotificationAlert, StateSocialMap } from "../types";
 import { STATE_CARDS, JOB_CATS, QUALS, CAT_COLORS } from "../data";
 
 // Shared interface imported or used locally
@@ -14,6 +14,8 @@ export interface AppContextType {
   admits: AdmitCard[];
   ticker: string;
   siteSettings: SiteSettings;
+  stateSocials: StateSocialMap;
+  setStateSocials: (updatedVal: StateSocialMap | ((prev: StateSocialMap) => StateSocialMap)) => Promise<void>;
   addToast: (msg: string, type: "success" | "warn" | "error") => void;
   setView: (view: "site" | "admin") => void;
   isLoading: boolean;
@@ -34,7 +36,7 @@ export const Website: React.FC = () => {
   if (!context) return null;
 
   const { 
-    jobs, results, admits, ticker, siteSettings, setView, addToast,
+    jobs, results, admits, ticker, siteSettings, stateSocials, setView, addToast,
     pushSubscription, setPushSubscription, pushAlerts, setPushAlerts, sendPushAlertToClient,
     currentUser, loginWithGoogle, logoutAdmin
   } = context;
@@ -42,7 +44,11 @@ export const Website: React.FC = () => {
   // Local navigation state
   const [sitePage, setSitePage] = useState<"home" | "state" | "job">("home");
   const [selectedState, setSelectedState] = useState<string | null>(() => {
-    return localStorage.getItem("userStateSelection") || "All India";
+    const saved = localStorage.getItem("userStateSelection");
+    if (!saved || saved === "All India") {
+      return null;
+    }
+    return saved;
   });
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -184,8 +190,6 @@ export const Website: React.FC = () => {
   // Clean navigation functions
   const goHome = () => {
     setSitePage("home");
-    setSelectedState("All India");
-    localStorage.removeItem("userStateSelection");
     setSelectedJob(null);
     setSearchQuery("");
     setCategoryFilter("");
@@ -194,7 +198,7 @@ export const Website: React.FC = () => {
     setViewAllSearch("");
     setStateSearch("");
     window.scrollTo({ top: 0, behavior: "smooth" });
-    addToast("🏠 Returned to Home. All filters cleared!", "success");
+    addToast("🏠 Returned to Home. All active filters cleared!", "success");
   };
 
   const goState = (stName: string) => {
@@ -363,23 +367,6 @@ export const Website: React.FC = () => {
 
             {/* Quick action: State selection grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[360px] overflow-y-auto scrollbar-thin pr-1 select-none">
-              <button
-                onClick={() => {
-                  setSelectedState("All India");
-                  localStorage.setItem("userStateSelection", "All India");
-                  addToast("🌎 Showing All India National jobs catalog!", "success");
-                }}
-                className="group bg-[#f8fafc] border-2 border-dashed border-[#ff0000]/60 p-3.5 rounded-lg text-left cursor-pointer transition-all duration-200 hover:bg-[#ff0000] hover:border-[#ff0000] hover:text-white flex items-center justify-between shadow-sm"
-              >
-                <div className="flex flex-col text-left leading-none">
-                  <span className="font-sans font-black text-sm text-[#ff0000] group-hover:text-white transition leading-none">
-                    ALL REGIONS
-                  </span>
-                  <span className="text-[10px] uppercase font-extrabold text-slate-500 group-hover:text-white transition mt-1.5">
-                    All India / UTs
-                  </span>
-                </div>
-              </button>
               {filteredStates.map((st) => {
                 const count = stateJobCount[st.name] || 0;
                 return (
@@ -1127,6 +1114,72 @@ export const Website: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Dynamic Custom Fields Section */}
+                  {selectedJob.customFields && selectedJob.customFields.length > 0 && (
+                    <div className="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm text-left mt-4">
+                      <h3 className="font-baloo text-base font-extrabold text-slate-900 border-b-2 border-slate-100 pb-2 flex items-center gap-2 mb-4">
+                        <span className="w-1.5 h-4.5 bg-[#FF6B00] rounded-full"></span> 💼 Additional Custom Specifications
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {selectedJob.customFields.filter(f => f.key.trim() !== "").map((field, fIdx) => (
+                          <div key={fIdx} className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2">
+                            <div className="space-y-1 text-left w-full">
+                              <span className="text-[10px] font-extrabold text-[#FF6B00] uppercase tracking-wider block">
+                                {field.key}
+                              </span>
+                              <div className="text-xs font-semibold text-slate-800 leading-relaxed break-words whitespace-pre-wrap select-text">
+                                {field.value}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dynamic state-specific socials module */}
+                  {(() => {
+                    const jobStateName = selectedJob.state || "All India";
+                    const stateSocial = stateSocials[jobStateName] || stateSocials["All India"];
+                    if (!stateSocial || (!stateSocial.whatsappUrl && !stateSocial.telegramUrl)) return null;
+
+                    return (
+                      <div className="bg-gradient-to-r from-emerald-50 via-teal-50/20 to-sky-50 border border-slate-200 rounded-2xl p-5 text-left space-y-3 mt-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🔔</span>
+                          <h4 className="font-baloo text-xs font-black text-slate-800 leading-none">
+                            Join {jobStateName} Government Job Forums / Groups
+                          </h4>
+                        </div>
+                        <p className="text-[10px] font-semibold text-slate-500 leading-relaxed">
+                          Do not miss any updates! Receive future customized recruitment news, admit pass releases, and official solution keys for <strong className="text-[#003399]">{jobStateName}</strong> directly on WhatsApp or Telegram.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 select-none">
+                          {stateSocial.whatsappUrl && (
+                            <a
+                              href={stateSocial.whatsappUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black uppercase py-2.5 px-4 rounded-xl text-center flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+                            >
+                              💬 Get Live WhatsApp Alerts
+                            </a>
+                          )}
+                          {stateSocial.telegramUrl && (
+                            <a
+                              href={stateSocial.telegramUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-black uppercase py-2.5 px-4 rounded-xl text-center flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+                            >
+                              ✈️ Join Telegram Broadcast
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* FAQs and SEO Google Simulator Container */}
                   <div className="space-y-6 mt-6">
                     
@@ -1190,83 +1243,84 @@ export const Website: React.FC = () => {
                       )}
                     </div>
 
-                    {/* SEO OPTIMIZER GOOGLE SIMULATOR FOR RANK 1 */}
-                    <div className="bg-[#f8f9fc] border-2 border-slate-200 rounded-2xl p-5 text-left space-y-4">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">Rank #1 Google SEO Active</span>
-                          <span className="text-[10px] text-slate-500 font-bold">Search Preview Standard</span>
+                    {/* SEO OPTIMIZER GOOGLE SIMULATOR FOR RANK 1 - Visible to authenticated administrators only */}
+                    {currentUser?.email === "prokashmal799@gmail.com" && (
+                      <div className="bg-[#f8f9fc] border-2 border-slate-200 rounded-2xl p-5 text-left space-y-4">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">Rank #1 Google SEO Active</span>
+                            <span className="text-[10px] text-slate-500 font-bold">Search Preview Standard</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-bold font-mono">Mobile View Grid</div>
                         </div>
-                        <div className="text-[10px] text-slate-400 font-bold font-mono">Mobile View Grid</div>
-                      </div>
 
-                      {/* Google Snippet Live Card Simulator */}
-                      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-1.5 font-sans">
-                        <div className="flex items-center gap-2.5 text-slate-800 select-none">
-                          <div className="w-6 h-6 rounded-full bg-slate-105 border border-slate-200 flex items-center justify-center font-bold text-[#e01e22] text-[11px]">📢</div>
-                          <div className="leading-tight text-left">
-                            <div className="text-[11px] font-extrabold text-slate-800">Sarkari Alerts Portal</div>
-                            <div className="text-[10px] text-emerald-700 flex items-center gap-1 leading-none font-mono">
-                              <span>https://sarkarialerts.com &rsaquo; jobs &rsaquo; {selectedJob.title.toLowerCase().replace(/[^a-z0-str0-9]+/g, '-')}</span>
+                        {/* Google Snippet Live Card Simulator */}
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-1.5 font-sans">
+                          <div className="flex items-center gap-2.5 text-slate-800 select-none">
+                            <div className="w-6 h-6 rounded-full bg-slate-105 border border-slate-200 flex items-center justify-center font-bold text-[#e01e22] text-[11px]">📢</div>
+                            <div className="leading-tight text-left">
+                              <div className="text-[11px] font-extrabold text-slate-800">Sarkari Alerts Portal</div>
+                              <div className="text-[10px] text-emerald-700 flex items-center gap-1 leading-none font-mono">
+                                <span>https://sarkarialerts.com &rsaquo; jobs &rsaquo; {selectedJob.title.toLowerCase().replace(/[^a-z0-str0-9]+/g, '-')}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Title link */}
-                        <a href="#" className="block text-[#1a0dab] hover:underline text-sm font-bold tracking-tight leading-tight mt-1 text-left text-decoration-none">
-                          {selectedJob.seo?.metaTitle || `${selectedJob.title} Recruitment 2026 at ${selectedJob.org} - Apply Online`}
-                        </a>
+                          {/* Title link */}
+                          <a href="#" className="block text-[#1a0dab] hover:underline text-sm font-bold tracking-tight leading-tight mt-1 text-left text-decoration-none">
+                            {selectedJob.seo?.metaTitle || `${selectedJob.title} Recruitment 2026 at ${selectedJob.org} - Apply Online`}
+                          </a>
 
-                        {/* Description */}
-                        <p className="text-[11px] leading-relaxed text-slate-600 text-left">
-                          <span className="text-slate-505 font-semibold">
-                            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &mdash;&nbsp;
-                          </span>
-                          {selectedJob.seo?.metaDesc || `Official prospectus announced by ${selectedJob.org}. Over ${selectedJob.vacancy} positions available. Final deadline date closes on ${selectedJob.lastDate}. Download handbook and apply online.`}
-                        </p>
+                          {/* Description */}
+                          <p className="text-[11px] leading-relaxed text-slate-600 text-left">
+                            <span className="text-slate-505 font-semibold">
+                              {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &mdash;&nbsp;
+                            </span>
+                            {selectedJob.seo?.metaDesc || `Official prospectus announced by ${selectedJob.org}. Over ${selectedJob.vacancy} positions available. Final deadline date closes on ${selectedJob.lastDate}. Download handbook and apply online.`}
+                          </p>
 
-                        {/* Focus Keywords Tags */}
-                        {selectedJob.seo?.focusKeywords && (
-                          <div className="pt-2 flex flex-wrap gap-1">
-                            {selectedJob.seo.focusKeywords.split(',').map((kw, i) => (
-                              <span key={i} className="text-[9px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-slate-500 font-medium font-mono">
-                                #{kw.trim()}
-                              </span>
-                            ))}
+                          {/* Focus Keywords Tags */}
+                          {selectedJob.seo?.focusKeywords && (
+                            <div className="pt-2 flex flex-wrap gap-1">
+                              {selectedJob.seo.focusKeywords.split(',').map((kw, i) => (
+                                <span key={i} className="text-[9px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-slate-500 font-medium font-mono">
+                                  #{kw.trim()}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Standard Schema Microdata badges */}
+                          <div className="pt-2.5 flex items-center gap-3 border-t border-slate-100 text-[10px] text-slate-400 font-semibold select-none">
+                            <span className="flex items-center gap-1 text-[#ea4335]">
+                              <strong>⚡ Google Schema:</strong> JobPosting Verified
+                            </span>
+                            <span className="text-slate-300">|</span>
+                            <span className="text-emerald-700">✓ JSON-LD Script Injected</span>
                           </div>
-                        )}
-
-                        {/* Standard Schema Microdata badges */}
-                        <div className="pt-2.5 flex items-center gap-3 border-t border-slate-100 text-[10px] text-slate-400 font-semibold select-none">
-                          <span className="flex items-center gap-1 text-[#ea4335]">
-                            <strong>⚡ Google Schema:</strong> JobPosting Verified
-                          </span>
-                          <span className="text-slate-300">|</span>
-                          <span className="text-emerald-700">✓ JSON-LD Script Injected</span>
                         </div>
+
+                        {/* Display JSON-LD Active Script markup */}
+                        <details className="group border border-slate-200 rounded-xl bg-slate-50 text-xs">
+                          <summary className="flex cursor-pointer items-center justify-between p-3 select-none text-slate-700 font-extrabold">
+                            <span>🔍 View Injected Metadata Script (Structured JSON-LD)</span>
+                            <span className="transition group-open:-rotate-180">
+                              <svg fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="18"><path d="M6 9l6 6 6-6"></path></svg>
+                            </span>
+                          </summary>
+                          <div className="border-t border-slate-200 p-3 bg-slate-900 text-lime-400 font-mono text-[10px] whitespace-pre-wrap rounded-b-xl overflow-x-auto text-left leading-relaxed">
+                            {selectedJob.seo?.structuredDataSchema || JSON.stringify({
+                              "@context": "https://schema.org",
+                              "@type": "JobPosting",
+                              "title": selectedJob.title,
+                              "hiringOrganization": selectedJob.org,
+                              "datePosted": "2026-05-30",
+                              "validThrough": selectedJob.lastDate
+                            }, null, 2)}
+                          </div>
+                        </details>
                       </div>
-
-                      {/* Display JSON-LD Active Script markup */}
-                      <details className="group border border-slate-200 rounded-xl bg-slate-50 text-xs">
-                        <summary className="flex cursor-pointer items-center justify-between p-3 select-none text-slate-700 font-extrabold">
-                          <span>🔍 View Injected Metadata Script (Structured JSON-LD)</span>
-                          <span className="transition group-open:-rotate-180">
-                            <svg fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="18"><path d="M6 9l6 6 6-6"></path></svg>
-                          </span>
-                        </summary>
-                        <div className="border-t border-slate-200 p-3 bg-slate-900 text-lime-400 font-mono text-[10px] whitespace-pre-wrap rounded-b-xl overflow-x-auto text-left leading-relaxed">
-                          {selectedJob.seo?.structuredDataSchema || JSON.stringify({
-                            "@context": "https://schema.org",
-                            "@type": "JobPosting",
-                            "title": selectedJob.title,
-                            "hiringOrganization": selectedJob.org,
-                            "datePosted": "2026-05-30",
-                            "validThrough": selectedJob.lastDate
-                          }, null, 2)}
-                        </div>
-                      </details>
-                      
-                    </div>
+                    )}
 
                   </div>
 
@@ -1350,16 +1404,6 @@ export const Website: React.FC = () => {
                     {/* Interaction Buttons right on banner */}
                     <div className="flex flex-wrap gap-2 shrink-0 w-full md:w-auto">
                       <button
-                        onClick={() => {
-                          setSelectedState("All India");
-                          localStorage.setItem("userStateSelection", "All India");
-                          addToast("🌎 Switched to All India National Jobs Hub!", "success");
-                        }}
-                        className="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition cursor-pointer text-white shadow-sm flex items-center justify-center gap-1 w-full sm:w-auto"
-                      >
-                        🌎 All India
-                      </button>
-                      <button
                         onClick={() => setShowStateSelectorModal(true)}
                         className="bg-[#FF6B00] hover:bg-orange-600 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition cursor-pointer text-white shadow-md flex items-center justify-center gap-1 w-full sm:w-auto"
                       >
@@ -1368,6 +1412,55 @@ export const Website: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* DYNAMIC STATE-SPECIFIC REGIONAL WHATSAPP & TELEGRAM JOINS */}
+                {(() => {
+                  const currentStateName = selectedState || "All India";
+                  const stateSocial = stateSocials[currentStateName] || stateSocials["All India"] || { whatsappUrl: "", telegramUrl: "" };
+                  
+                  if (!stateSocial.whatsappUrl && !stateSocial.telegramUrl) return null;
+
+                  return (
+                    <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-sm text-center flex flex-col md:flex-row items-center justify-between gap-4 mt-2 animate-fade-in text-left">
+                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <div className="p-3 bg-[#003399]/10 text-[#003399] rounded-2xl shrink-0">
+                          <Sparkles className="w-5 h-5 text-[#003399]" />
+                        </div>
+                        <div>
+                          <h3 className="font-baloo text-sm font-black text-slate-800 leading-none">
+                            📢 Joint Group for {currentStateName} Social Channels
+                          </h3>
+                          <p className="text-[10px] text-slate-400 font-bold mt-1.5 leading-snug">
+                            Get real-time job openings, results, and syllabus updates customized specifically for <strong className="text-[#003399]">{currentStateName}</strong>.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0 select-none">
+                        {stateSocial.whatsappUrl && (
+                          <a
+                            href={stateSocial.whatsappUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 px-5 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto hover:scale-[1.02] border-b-2 border-emerald-800"
+                          >
+                            <span className="text-xs">💬</span> WhatsApp Group
+                          </a>
+                        )}
+                        {stateSocial.telegramUrl && (
+                          <a
+                            href={stateSocial.telegramUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-sky-500 hover:bg-sky-600 text-white text-xs font-black uppercase tracking-wider py-2.5 px-5 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto hover:scale-[1.02] border-b-2 border-sky-700"
+                          >
+                            <span className="text-xs">✈️</span> Telegram Channel
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* HIGH CONTRAST BLOCK BANNER BUTTONS */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-0.5 font-sans">
@@ -2215,7 +2308,7 @@ export const Website: React.FC = () => {
                 <h3 className="font-baloo font-black text-base sm:text-lg text-[#FFB800] leading-none mb-1">
                   ✏️ Switch State / UT Preference
                 </h3>
-                <p className="text-[10px] text-slate-400 font-medium">Select a new region or pick All India to modify lists</p>
+                <p className="text-[10px] text-slate-400 font-medium">Select a new region below to personalize lists</p>
               </div>
               <button 
                 onClick={() => { setShowStateSelectorModal(false); setStateSearch(""); }} 
@@ -2245,22 +2338,6 @@ export const Website: React.FC = () => {
 
               {/* Grid selectors */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[300px] overflow-y-auto pr-1">
-                <button
-                  onClick={() => {
-                    setSelectedState("All India");
-                    localStorage.setItem("userStateSelection", "All India");
-                    setShowStateSelectorModal(false);
-                    setStateSearch("");
-                    addToast("🌎 Showing All India National jobs catalog!", "success");
-                  }}
-                  className={`group border p-3 rounded-xl text-left cursor-pointer transition-all duration-150 flex items-center justify-between ${selectedState === "All India" ? "bg-[#FF6B00] border-[#FF6B00] text-white" : "bg-[#0a0f2e]/40 border-slate-800 hover:bg-[#FF6B00] hover:text-white hover:border-[#FF6B00]"}`}
-                >
-                  <div className="flex flex-col text-left leading-none">
-                    <span className="font-baloo font-extrabold text-xs text-[#FFB800] group-hover:text-white transition leading-none">ALL</span>
-                    <span className="text-[9px] uppercase font-bold text-slate-300 group-hover:text-white transition mt-1">All India</span>
-                  </div>
-                </button>
-
                 {filteredStates.map((st) => {
                   const count = stateJobCount[st.name] || 0;
                   const active = selectedState === st.name;
@@ -2550,7 +2627,7 @@ export const Website: React.FC = () => {
             label: "State", 
             icon: (active: boolean) => <MapPin className={`w-5 h-5 mx-auto transition-all duration-350 ${active ? "text-white scale-110" : "text-red-400"}`} />, 
             action: () => setShowStateSelectorModal(true),
-            active: showStateSelectorModal || (selectedState !== "All India" && sitePage !== "job")
+            active: showStateSelectorModal || (selectedState !== null && sitePage !== "job")
           }
         ].map((btn, idx) => {
           const isActive = btn.active;

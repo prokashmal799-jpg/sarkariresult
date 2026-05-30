@@ -527,3 +527,142 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   headerSlot: "8899775533",
   sidebarSlot: "1122334455"
 };
+
+export const DEFAULT_STATE_SOCIALS: Record<string, { whatsappUrl: string; telegramUrl: string }> = {
+  "All India": {
+    whatsappUrl: "https://chat.whatsapp.com/GxqC8Frtb9C2Xb7L5zG4a1",
+    telegramUrl: "https://t.me/SarkariResultAllIndia"
+  },
+  "West Bengal": {
+    whatsappUrl: "https://chat.whatsapp.com/Kz8jD2Xv8zN7bL6zK9a5wX",
+    telegramUrl: "https://t.me/SarkariResultWestBengal"
+  },
+  "Bihar": {
+    whatsappUrl: "https://chat.whatsapp.com/ByzP4z9b2yX2bL3zM7q1vF",
+    telegramUrl: "https://t.me/SarkariResultBihar"
+  },
+  "Uttar Pradesh": {
+    whatsappUrl: "https://chat.whatsapp.com/LzpK3y9b2vC5zB9xK4r2mQ",
+    telegramUrl: "https://t.me/SarkariResultUP"
+  },
+  "Delhi": {
+    whatsappUrl: "https://chat.whatsapp.com/Dly8Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultDelhi"
+  },
+  "Andhra Pradesh": {
+    whatsappUrl: "https://chat.whatsapp.com/Apy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultAP"
+  },
+  "Arunachal Pradesh": {
+    whatsappUrl: "https://chat.whatsapp.com/Ary2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultArunachal"
+  },
+  "Assam": {
+    whatsappUrl: "https://chat.whatsapp.com/Asy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultAssam"
+  },
+  "Chhattisgarh": {
+    whatsappUrl: "https://chat.whatsapp.com/Cgy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultChhattisgarh"
+  },
+  "Goa": {
+    whatsappUrl: "https://chat.whatsapp.com/Gay2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultGoa"
+  },
+  "Gujarat": {
+    whatsappUrl: "https://chat.whatsapp.com/Gjy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultGujarat"
+  },
+  "Haryana": {
+    whatsappUrl: "https://chat.whatsapp.com/Hry2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultHaryana"
+  },
+  "Himachal Pradesh": {
+    whatsappUrl: "https://chat.whatsapp.com/Hpy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultHimachal"
+  },
+  "Jharkhand": {
+    whatsappUrl: "https://chat.whatsapp.com/Jhy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultJharkhand"
+  },
+  "Karnataka": {
+    whatsappUrl: "https://chat.whatsapp.com/Kay2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultKarnataka"
+  },
+  "Kerala": {
+    whatsappUrl: "https://chat.whatsapp.com/Kly2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultKerala"
+  },
+  "Madhya Pradesh": {
+    whatsappUrl: "https://chat.whatsapp.com/Mpy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultMP"
+  },
+  "Maharashtra": {
+    whatsappUrl: "https://chat.whatsapp.com/Mhy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultMaharashtra"
+  },
+  "Manipur": {
+    whatsappUrl: "https://chat.whatsapp.com/Mny2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultManipur"
+  },
+  "Meghalaya": {
+    whatsappUrl: "https://chat.whatsapp.com/Mly2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultMeghalaya"
+  },
+  "Mizoram": {
+    whatsappUrl: "https://chat.whatsapp.com/Mzy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultMizoram"
+  },
+  "Nagaland": {
+    whatsappUrl: "https://chat.whatsapp.com/Nly2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultNagaland"
+  },
+  "Odisha": {
+    whatsappUrl: "https://chat.whatsapp.com/Ody2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultOdisha"
+  },
+  "Punjab": {
+    whatsappUrl: "https://chat.whatsapp.com/Pby2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultPunjab"
+  },
+  "Rajasthan": {
+    whatsappUrl: "https://chat.whatsapp.com/Rjy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultRajasthan"
+  },
+  "Sikkim": {
+    whatsappUrl: "https://chat.whatsapp.com/Sky2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultSikkim"
+  },
+  "Tamil Nadu": {
+    whatsappUrl: "https://chat.whatsapp.com/Tny2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultTamilNadu"
+  },
+  "Telangana": {
+    whatsappUrl: "https://chat.whatsapp.com/Tgy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultTelangana"
+  },
+  "Tripura": {
+    whatsappUrl: "https://chat.whatsapp.com/Try2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultTripura"
+  },
+  "Uttarakhand": {
+    whatsappUrl: "https://chat.whatsapp.com/Uky2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultUttarakhand"
+  },
+  "Jammu & Kashmir": {
+    whatsappUrl: "https://chat.whatsapp.com/Jky2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultJK"
+  },
+  "Ladakh": {
+    whatsappUrl: "https://chat.whatsapp.com/Lay2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultLadakh"
+  },
+  "Chandigarh": {
+    whatsappUrl: "https://chat.whatsapp.com/Chy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultChandigarh"
+  },
+  "Puducherry": {
+    whatsappUrl: "https://chat.whatsapp.com/Puy2Jz2k5xH1cZ9vK3p8wR",
+    telegramUrl: "https://t.me/SarkariResultPuducherry"
+  }
+};

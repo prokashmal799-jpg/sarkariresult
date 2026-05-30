@@ -3,6 +3,11 @@ export interface FAQItem {
   answer: string;
 }
 
+export interface CustomField {
+  key: string;
+  value: string;
+}
+
 export interface SEOMetadata {
   metaTitle: string;
   metaDesc: string;
@@ -34,6 +39,7 @@ export interface Job {
   created: string;
   faq?: FAQItem[];
   seo?: SEOMetadata;
+  customFields?: CustomField[];
 }
 
 export interface ExamResult {
@@ -64,6 +70,13 @@ export interface SiteSettings {
   headerSlot: string;
   sidebarSlot: string;
 }
+
+export interface StateSocialLink {
+  whatsappUrl: string;
+  telegramUrl: string;
+}
+
+export type StateSocialMap = Record<string, StateSocialLink>;
 
 export interface PushNotificationSetting {
   subscribed: boolean;

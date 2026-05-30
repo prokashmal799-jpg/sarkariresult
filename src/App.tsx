@@ -3,9 +3,9 @@ import { AppContext } from "./components/Website";
 import { Website } from "./components/Website";
 import { AdminPanel } from "./components/AdminPanel";
 import { ToastContainer, ToastMessage } from "./components/Toast";
-import { Job, ExamResult, AdmitCard, SiteSettings, PushNotificationSetting, PushNotificationAlert } from "./types";
+import { Job, ExamResult, AdmitCard, SiteSettings, PushNotificationSetting, PushNotificationAlert, StateSocialMap } from "./types";
 import { 
-  INIT_JOBS, INIT_RESULTS, INIT_ADMITS, DEFAULT_TICKER, DEFAULT_SETTINGS 
+  INIT_JOBS, INIT_RESULTS, INIT_ADMITS, DEFAULT_TICKER, DEFAULT_SETTINGS, DEFAULT_STATE_SOCIALS 
 } from "./data";
 import { db, auth, OperationType, handleFirestoreError } from "./firebase";
 import { 
@@ -123,6 +123,7 @@ export default function App() {
   const [admits, setAdmitCards] = useState<AdmitCard[]>([]);
   const [ticker, setTicker] = useState("");
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+  const [stateSocials, setStateSocials] = useState<StateSocialMap>(DEFAULT_STATE_SOCIALS);
 
   // Auth States
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -201,6 +202,24 @@ export default function App() {
         console.warn("Failed retrieving siteSettings from Firestore, using local defaults:", err);
       }
       setSiteSettings(loadedSettings);
+
+      // A2) Load state-specific social networks configuration
+      let loadedSocials = DEFAULT_STATE_SOCIALS;
+      try {
+        const socialsSnap = await getDoc(doc(db, "siteSettings", "socials"));
+        if (socialsSnap.exists()) {
+          loadedSocials = { ...DEFAULT_STATE_SOCIALS, ...(socialsSnap.data() as StateSocialMap) };
+        } else {
+          try {
+            await setDoc(doc(db, "siteSettings", "socials"), DEFAULT_STATE_SOCIALS);
+          } catch (e) {
+            console.warn("Unable to seed default state socials: ", e);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed retrieving state socials from Firestore, using local defaults:", err);
+      }
+      setStateSocials(loadedSocials);
 
       // B) Load ticker marquee banner
       let loadedTicker = DEFAULT_TICKER;
@@ -465,6 +484,17 @@ export default function App() {
     }
   };
 
+  const editStateSocials = async (updatedVal: StateSocialMap | ((prev: StateSocialMap) => StateSocialMap)) => {
+    const nextSocials = typeof updatedVal === "function" ? updatedVal(stateSocials) : updatedVal;
+    setStateSocials(nextSocials);
+    try {
+      await setDoc(doc(db, "siteSettings", "socials"), nextSocials);
+      saveData("stateSocials", nextSocials);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "siteSettings/socials");
+    }
+  };
+
   // Register simulated or real Service Worker for background operations on mount
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -573,11 +603,13 @@ export default function App() {
     admits,
     ticker,
     siteSettings,
+    stateSocials,
     setJobs: editJobs,
     setResults: editResults,
     setAdmitCards: editAdmits,
     setTicker: editTickerText,
     setSiteSettings: editSettings,
+    setStateSocials: editStateSocials,
     addToast,
     setView,
     isLoading,
