@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core ID & String Verification Primitives
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == "prokashmal799@gmail.com" && 
+             request.auth.token.email_verified == true;
+    }
+
+    // String length boundary verification
+    function isStringWithLimit(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    // Entity validator: Job Document
+    function isValidJob(data) {
+      return data.id is int &&
+             isStringWithLimit(data.title, 300) &&
+             isStringWithLimit(data.org, 250) &&
+             isStringWithLimit(data.category, 150) &&
+             isStringWithLimit(data.state, 100) &&
+             isStringWithLimit(data.vacancy, 150) &&
+             isStringWithLimit(data.lastDate, 100) &&
+             isStringWithLimit(data.qual, 350) &&
+             isStringWithLimit(data.salary, 150) &&
+             isStringWithLimit(data.fee, 150) &&
+             isStringWithLimit(data.feeSC, 150) &&
+             isStringWithLimit(data.feeFemale, 150) &&
+             isStringWithLimit(data.ageLow, 100) &&
+             isStringWithLimit(data.ageHigh, 100) &&
+             isStringWithLimit(data.applyLink, 1000) &&
+             isStringWithLimit(data.notifLink, 1000) &&
+             data.status in ["active", "draft", "upcoming", "expired"] &&
+             data.isHot is bool &&
+             data.isNew is bool &&
+             isStringWithLimit(data.desc, 30000) &&
+             isStringWithLimit(data.created, 150);
+    }
+
+    // Entity validator: ExamResult Document
+    function isValidExamResult(data) {
+      return data.id is int &&
+             isStringWithLimit(data.title, 300) &&
+             isStringWithLimit(data.exam, 300) &&
+             isStringWithLimit(data.date, 150) &&
+             isStringWithLimit(data.link, 1000) &&
+             isStringWithLimit(data.state, 100) &&
+             data.status in ["published", "draft"];
+    }
+
+    // Entity validator: AdmitCard Document
+    function isValidAdmitCard(data) {
+      return data.id is int &&
+             isStringWithLimit(data.title, 300) &&
+             isStringWithLimit(data.exam, 300) &&
+             isStringWithLimit(data.examDate, 150) &&
+             isStringWithLimit(data.link, 1000) &&
+             isStringWithLimit(data.state, 100) &&
+             data.status in ["published", "draft"];
+    }
+
+    // Entity validator: SiteSettings Document
+    function isValidSiteSettings(data) {
+      return isStringWithLimit(data.siteName, 150) &&
+             isStringWithLimit(data.tagline, 250) &&
+             isStringWithLimit(data.email, 200) &&
+             isStringWithLimit(data.pubId, 150) &&
+             isStringWithLimit(data.headerSlot, 500) &&
+             isStringWithLimit(data.sidebarSlot, 500);
+    }
+
+    // Entity validator: Ticker Document
+    function isValidTicker(data) {
+      return isStringWithLimit(data.text, 1000);
+    }
+
+    // Entity validator: PushAlert Document
+    function isValidPushAlert(data) {
+      return data.id is int &&
+             isStringWithLimit(data.title, 300) &&
+             isStringWithLimit(data.body, 1500) &&
+             isStringWithLimit(data.category, 150) &&
+             isStringWithLimit(data.createdAt, 150);
+    }
+
+    // --- Database Entity Rule Scopes ---
+
+    match /jobs/{jobId} {
+      allow get: if isValidId(jobId) && (existing().status != "draft" || isAdmin());
+      allow list: if resource.data.status != "draft" || isAdmin();
+      allow create: if isValidId(jobId) && isAdmin() && isValidJob(incoming());
+      allow update: if isValidId(jobId) && isAdmin() && isValidJob(incoming());
+      allow delete: if isValidId(jobId) && isAdmin();
+    }
+
+    match /results/{resultId} {
+      allow get: if isValidId(resultId) && (existing().status != "draft" || isAdmin());
+      allow list: if resource.data.status != "draft" || isAdmin();
+      allow create: if isValidId(resultId) && isAdmin() && isValidExamResult(incoming());
+      allow update: if isValidId(resultId) && isAdmin() && isValidExamResult(incoming());
+      allow delete: if isValidId(resultId) && isAdmin();
+    }
+
+    match /admits/{admitId} {
+      allow get: if isValidId(admitId) && (existing().status != "draft" || isAdmin());
+      allow list: if resource.data.status != "draft" || isAdmin();
+      allow create: if isValidId(admitId) && isAdmin() && isValidAdmitCard(incoming());
+      allow update: if isValidId(admitId) && isAdmin() && isValidAdmitCard(incoming());
+      allow delete: if isValidId(admitId) && isAdmin();
+    }
+
+    match /siteSettings/{settingsId} {
+      allow get: if isValidId(settingsId);
+      allow list: if true;
+      allow create: if isValidId(settingsId) && isAdmin() && isValidSiteSettings(incoming());
+      allow update: if isValidId(settingsId) && isAdmin() && isValidSiteSettings(incoming());
+      allow delete: if isValidId(settingsId) && isAdmin();
+    }
+
+    match /ticker/{tickerId} {
+      allow get: if isValidId(tickerId);
+      allow list: if true;
+      allow create: if isValidId(tickerId) && isAdmin() && isValidTicker(incoming());
+      allow update: if isValidId(tickerId) && isAdmin() && isValidTicker(incoming());
+      allow delete: if isValidId(tickerId) && isAdmin();
+    }
+
+    match /pushAlerts/{alertId} {
+      allow get: if isValidId(alertId);
+      allow list: if true;
+      allow create: if isValidId(alertId) && isAdmin() && isValidPushAlert(incoming());
+      allow update: if isValidId(alertId) && isAdmin() && isValidPushAlert(incoming());
+      allow delete: if isValidId(alertId) && isAdmin();
+    }
+  }
+}

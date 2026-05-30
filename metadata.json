@@ -1,6 +1,6 @@
 {
-  "name": "BharatJobs",
-  "description": "Premium comprehensive Job Notification Portal styled in the classic Sarkari Result color scheme with active central and state jobs across all listable regions.",
+  "name": "Sarkari Result Live",
+  "description": "Premium comprehensive Job Notification Portal for SarkariResultLive.in, styled in the classic Sarkari Result color scheme with active central and state jobs across all listable regions.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

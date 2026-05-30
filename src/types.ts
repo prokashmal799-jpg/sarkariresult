@@ -1,3 +1,15 @@
+export interface FAQItem {
+  question: string;
+  answer: string;
+}
+
+export interface SEOMetadata {
+  metaTitle: string;
+  metaDesc: string;
+  focusKeywords: string;
+  structuredDataSchema?: string;
+}
+
 export interface Job {
   id: number;
   title: string;
@@ -20,6 +32,8 @@ export interface Job {
   isNew: boolean;
   desc: string;
   created: string;
+  faq?: FAQItem[];
+  seo?: SEOMetadata;
 }
 
 export interface ExamResult {
@@ -50,3 +64,18 @@ export interface SiteSettings {
   headerSlot: string;
   sidebarSlot: string;
 }
+
+export interface PushNotificationSetting {
+  subscribed: boolean;
+  channels: string[];
+}
+
+export interface PushNotificationAlert {
+  id: number;
+  title: string;
+  body: string;
+  category: string;
+  createdAt: string;
+  url?: string;
+}
+

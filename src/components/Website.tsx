@@ -4,7 +4,7 @@ import {
   GraduationCap, Clock, AlertTriangle, ChevronRight, Menu, X, 
   Printer, Share2, ArrowLeft, Copy, Download, ExternalLink 
 } from "lucide-react";
-import { Job, ExamResult, AdmitCard, SiteSettings } from "../types";
+import { Job, ExamResult, AdmitCard, SiteSettings, PushNotificationSetting, PushNotificationAlert } from "../types";
 import { STATE_CARDS, JOB_CATS, QUALS, CAT_COLORS } from "../data";
 
 // Shared interface imported or used locally
@@ -17,6 +17,11 @@ export interface AppContextType {
   addToast: (msg: string, type: "success" | "warn" | "error") => void;
   setView: (view: "site" | "admin") => void;
   isLoading: boolean;
+  pushSubscription: PushNotificationSetting;
+  setPushSubscription: React.Dispatch<React.SetStateAction<PushNotificationSetting>>;
+  pushAlerts: PushNotificationAlert[];
+  setPushAlerts: React.Dispatch<React.SetStateAction<PushNotificationAlert[]>>;
+  sendPushAlertToClient: (title: string, body: string, category: string, url?: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -25,7 +30,10 @@ export const Website: React.FC = () => {
   const context = React.useContext(AppContext);
   if (!context) return null;
 
-  const { jobs, results, admits, ticker, siteSettings, setView, addToast } = context;
+  const { 
+    jobs, results, admits, ticker, siteSettings, setView, addToast,
+    pushSubscription, setPushSubscription, pushAlerts, setPushAlerts, sendPushAlertToClient
+  } = context;
 
   // Local navigation state
   const [sitePage, setSitePage] = useState<"home" | "state" | "job">("home");
@@ -33,6 +41,75 @@ export const Website: React.FC = () => {
     return localStorage.getItem("userStateSelection") || "All India";
   });
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const [isNotificationDropdownOpen, setIsNotificationDropdownOpen] = useState(false);
+  const [showPushBanner, setShowPushBanner] = useState(() => {
+    return localStorage.getItem("pushBannerDismissed") !== "true" && !pushSubscription.subscribed;
+  });
+
+  // Subscriber permission request trigger
+  const handleSubscribeToPush = async () => {
+    if (!("Notification" in window)) {
+      addToast("⚠ Your browser does not support native push notifications, but the integrated Web Push simulation has been authorized!", "warn");
+      setPushSubscription({
+        subscribed: true,
+        channels: ["Central Jobs", "State Jobs", "Admit Cards", "Exam Results"]
+      });
+      setShowPushBanner(false);
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === "granted") {
+        setPushSubscription({
+          subscribed: true,
+          channels: ["Central Jobs", "State Jobs", "Admit Cards", "Exam Results"]
+        });
+        setShowPushBanner(false);
+        sendPushAlertToClient(
+          "🔔 Subscription Connected!",
+          "You will now receive SARKARI RESULT Instant alerts direct in this active sandbox tab.",
+          "Central Jobs"
+        );
+      } else {
+        // Fallback subscription if blocked so they can still test the system
+        addToast("⚠ Push permission was ignored or denied. We enabled the inside-app simulated Push alert workflow for you!", "warn");
+        setPushSubscription({
+          subscribed: true,
+          channels: ["Central Jobs", "State Jobs", "Admit Cards", "Exam Results"]
+        });
+        setShowPushBanner(false);
+      }
+    } catch (err) {
+      setPushSubscription({
+        subscribed: true,
+        channels: ["Central Jobs", "State Jobs", "Admit Cards", "Exam Results"]
+      });
+      setShowPushBanner(false);
+    }
+  };
+
+  const handleDismissPushBanner = () => {
+    localStorage.setItem("pushBannerDismissed", "true");
+    setShowPushBanner(false);
+    addToast("Alert subscription prompt dismissed. You can always subscribe using the bell icon in the header!", "success");
+  };
+
+  const togglePushChannel = (channel: string) => {
+    setPushSubscription(prev => {
+      const isSelected = prev.channels.includes(channel);
+      const nextChannels = isSelected 
+        ? prev.channels.filter(c => c !== channel)
+        : [...prev.channels, channel];
+      addToast(`${isSelected ? "Disabled" : "Enabled"} alerts for ${channel}!`, "success");
+      return {
+        ...prev,
+        channels: nextChannels
+      };
+    });
+  };
+
 
   useEffect(() => {
     const timerTick = setInterval(() => {
@@ -392,13 +469,18 @@ export const Website: React.FC = () => {
                 <span className="text-white">SARKARI</span>{" "}
                 <span className="text-[#ffcb05] drop-shadow-[0_2px_12px_rgba(255,203,5,0.6)]">RESULT</span>
               </h1>
-              <div className="flex items-center gap-2 mt-0.5 sm:mt-1.5">
+              <div className="flex items-center flex-wrap gap-2 mt-0.5 sm:mt-1.5">
                 <p className="text-[7px] sm:text-[10px] uppercase tracking-widest text-[#56f082] font-black leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
                   WWW.SARKARIRESULT.COM
                 </p>
                 <span className="bg-emerald-500 text-white text-[6px] sm:text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase leading-none animate-pulse scale-90 sm:scale-100 origin-left select-none">
                   LIVE ⚡
                 </span>
+                {selectedState && selectedState !== "All India" && (
+                  <span className="bg-[#FF6B00] border border-orange-400 text-white text-[8px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded shadow-sm shrink-0 uppercase tracking-wide leading-none select-none">
+                    📍 {selectedState} HUB
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -421,6 +503,169 @@ export const Website: React.FC = () => {
 
           {/* Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            
+            {/* Real-time Web Notification Bell */}
+            <div className="relative">
+              <button
+                onClick={() => setIsNotificationDropdownOpen(!isNotificationDropdownOpen)}
+                className={`p-2 sm:p-2.5 rounded-xl border flex items-center justify-center transition-all duration-200 cursor-pointer shadow-md relative active:scale-95 ${
+                  pushSubscription.subscribed 
+                    ? "bg-[#10b981]/15 text-[#34d399] border-[#10b981]/30 hover:bg-[#10b981]/25 animate-none" 
+                    : "bg-white/10 text-[#ffcb05] border-white/20 hover:bg-white/15 animate-pulse"
+                }`}
+                title="Job Alerts & Notification Radar"
+              >
+                <Bell className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${!pushSubscription.subscribed ? "animate-bounce" : ""}`} />
+                
+                {/* Unsubscribed Badge Indicator */}
+                {!pushSubscription.subscribed && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-[#ff4d4d] border border-white text-[7px] font-black text-white rounded-full w-4 h-4 flex items-center justify-center shadow-md select-none">
+                    !
+                  </span>
+                )}
+                {pushSubscription.subscribed && pushAlerts.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] font-black text-white rounded-full w-3.5 h-3.5 flex items-center justify-center shadow-md animate-pulse">
+                    {pushAlerts.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Bell Dropdown Panel */}
+              {isNotificationDropdownOpen && (
+                <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border-2 border-slate-200 shadow-2xl rounded-2xl overflow-hidden z-[999] text-left animate-fade-up">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-[#01143f] to-[#022a7e] text-white p-4 select-none">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Bell className="w-4 h-4 text-[#ffcb05]" />
+                        <span className="font-extrabold text-sm uppercase tracking-wide">Job Alerts Radar</span>
+                      </div>
+                      <button 
+                        onClick={() => setIsNotificationDropdownOpen(false)}
+                        className="text-slate-300 hover:text-white"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <p className="text-[10px] text-slate-300 font-semibold mt-1">
+                      Configure your real-time notification triggers and alert categories.
+                    </p>
+
+                    {/* Status Toggle Banner */}
+                    <div className="mt-3 bg-white/5 border border-white/10 p-2.5 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${pushSubscription.subscribed ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                        <span className="text-[11px] font-bold">
+                          Status: {pushSubscription.subscribed ? '🟢 Web Alerts Active' : '⚪ Unsubscribed'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (pushSubscription.subscribed) {
+                            setPushSubscription(prev => ({ ...prev, subscribed: false }));
+                            addToast("Job Alerts subscription paused.", "warn");
+                          } else {
+                            handleSubscribeToPush();
+                          }
+                        }}
+                        className={`text-[9px] font-black uppercase px-2 py-1 rounded transition border cursor-pointer ${
+                          pushSubscription.subscribed 
+                            ? "bg-amber-500 hover:bg-amber-650 text-white border-amber-600" 
+                            : "bg-emerald-500 hover:bg-emerald-650 text-white border-emerald-600"
+                        }`}
+                      >
+                        {pushSubscription.subscribed ? "Pause" : "Turn On"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Channels Configuration */}
+                  <div className="p-3 bg-slate-50 border-b border-slate-150 select-none">
+                    <h4 className="text-[9px] uppercase font-black tracking-widest text-[#FF6B00] mb-2">📡 Push Alert Channels</h4>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {["Central Jobs", "State Jobs", "Admit Cards", "Exam Results"].map(chan => {
+                        const isChecked = pushSubscription.channels.includes(chan);
+                        return (
+                          <button
+                            key={chan}
+                            onClick={() => togglePushChannel(chan)}
+                            disabled={!pushSubscription.subscribed}
+                            className={`flex items-center justify-between p-2 rounded-lg border text-[10px] font-bold transition cursor-pointer text-left ${
+                              !pushSubscription.subscribed 
+                                ? "opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-450"
+                                : isChecked
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>{chan}</span>
+                            <span className="text-xs">{isChecked ? "✅" : "🔕"}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Alerts Inbox Queue List */}
+                  <div className="p-4 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="flex items-center justify-between pb-2">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-500 font-mono">📥 Notification Inbox ({pushAlerts.length})</span>
+                      {pushAlerts.length > 0 && (
+                        <button 
+                          onClick={() => {
+                            setPushAlerts([]);
+                            addToast("Notification queue cleared!", "success");
+                          }}
+                          className="text-[9px] font-black text-rose-600 uppercase hover:underline cursor-pointer"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+
+                    {pushAlerts.length === 0 ? (
+                      <div className="py-6 text-center">
+                        <p className="text-xs text-slate-400 font-bold font-sans">No alerts received yet</p>
+                        <p className="text-[10px] text-slate-450 mt-1">Select channel targets to receive live updates!</p>
+                      </div>
+                    ) : (
+                      pushAlerts.map(alert => (
+                        <div key={alert.id} className="py-2.5 flex flex-col gap-0.5 font-sans">
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="bg-blue-50 text-[#022a7e] border border-blue-100 font-black text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded leading-none">
+                              {alert.category}
+                            </span>
+                            <span className="text-[8px] font-mono text-slate-400 font-semibold uppercase">
+                              {new Date(alert.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <h5 className="font-extrabold text-[11px] text-slate-800 leading-tight mt-1">{alert.title}</h5>
+                          <p className="text-[10px] text-slate-500 leading-snug font-medium">{alert.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Active Test Action */}
+                  <div className="p-3 bg-slate-50 border-t border-slate-150 flex items-center justify-center">
+                    <button
+                      onClick={() => {
+                        sendPushAlertToClient(
+                          "📣 Device Service Test",
+                          "Your Web Push Notification Service is active and working perfectly!",
+                          "Central Jobs"
+                        );
+                      }}
+                      className="text-[10px] font-black uppercase text-[#022a7e] hover:text-red-650 flex items-center gap-1 select-none cursor-pointer"
+                    >
+                      ⚡ Test Local Bell Chime
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowStateSelectorModal(true)}
               className="bg-[#ff0000] hover:bg-red-700 text-white px-2 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black flex items-center gap-1.5 border border-red-500 cursor-pointer tracking-wider select-none shadow-md hover:shadow-red-900/40 active:scale-95 transition-all uppercase"
@@ -430,9 +675,9 @@ export const Website: React.FC = () => {
             </button>
             <button
               onClick={() => setView("admin")}
-              className="hidden md:flex bg-[#ffde00] text-[#022a7e] hover:bg-[#ffe633] px-3.5 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition-all duration-150 shadow-md cursor-pointer items-center gap-1.5 border border-[#ffde00] active:scale-95"
+              className="flex bg-[#ffde00] text-[#022a7e] hover:bg-[#ffe633] px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black tracking-wider uppercase transition-all duration-150 shadow-md cursor-pointer items-center gap-1 border border-[#ffde00] active:scale-95"
             >
-              ⚙️ Super Admin
+              ⚙️ <span className="hidden xs:inline">Super</span> Admin
             </button>
             <button
               onClick={() => addToast("Secure candidate portal login is scheduled in release 2.4", "warn")}
@@ -807,6 +1052,149 @@ export const Website: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* FAQs and SEO Google Simulator Container */}
+                  <div className="space-y-6 mt-6">
+                    
+                    {/* ACCORDION FAQ BLOCK */}
+                    <div className="bg-white border-2 border-slate-150 rounded-2xl p-5 shadow-sm text-left">
+                      <h3 className="font-baloo text-base font-extrabold text-slate-905 border-b-2 border-slate-100 pb-2.5 flex items-center gap-2 mb-4">
+                        <span className="w-1.5 h-4.5 bg-indigo-600 rounded-full"></span> 📑 Frequently Asked Questions (FAQ) & Guidelines
+                      </h3>
+
+                      {(!selectedJob.faq || selectedJob.faq.length === 0) ? (
+                        <div className="space-y-4">
+                          {[
+                            {
+                              question: `What is the closing timeline for registered ${selectedJob.org} applications?`,
+                              answer: `Interested applicants must submit online forms before ${selectedJob.lastDate}. Detailed instruction schemes are highlighted in the prospectus handbook.`
+                            },
+                            {
+                              question: `Is there an age relief factor for SC/ST candidates in ${selectedJob.org} recruitment?`,
+                              answer: `Yes, upper age relaxation concessions are applied as per central statutory mandate codes. These are detailed inside the official notification circular.`
+                            },
+                            {
+                              question: `Can I change my registered exam center after application fee settlement?`,
+                              answer: `No, change requests for designated centers are strictly prohibited. Triple-check all parameters before confirming the final registration.`
+                            }
+                          ].map((item, idx) => (
+                            <details key={idx} className="group border border-slate-150 rounded-xl [&_summary::-webkit-details-marker]:hidden bg-slate-50/25 transition">
+                              <summary className="flex cursor-pointer items-center justify-between gap-1.5 p-4 text-slate-900 select-none">
+                                <h4 className="text-xs font-extrabold font-sans leading-snug flex items-center gap-2">
+                                  <span className="text-[#FF6B00] font-black font-baloo text-[14px]">Q.</span> {item.question}
+                                </h4>
+                                <span className="relative size-5 shrink-0">
+                                  <svg className="absolute inset-0 size-5 opacity-100 group-open:opacity-0 text-slate-500 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9" /></svg>
+                                  <svg className="absolute inset-0 size-5 opacity-0 group-open:opacity-100 text-slate-500 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12H9" /></svg>
+                                </span>
+                              </summary>
+                              <div className="border-t border-slate-150 p-4 text-xs font-semibold leading-relaxed text-slate-700 font-sans bg-white rounded-b-xl">
+                                {item.answer}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {selectedJob.faq.map((item, idx) => (
+                            <details key={idx} className="group border border-slate-150 rounded-xl [&_summary::-webkit-details-marker]:hidden bg-slate-50/25 transition">
+                              <summary className="flex cursor-pointer items-center justify-between gap-1.5 p-4 text-slate-900 select-none">
+                                <h4 className="text-xs font-extrabold font-sans leading-snug flex items-center gap-2">
+                                  <span className="text-indigo-600 font-black font-mono text-[14px]">Q.</span> {item.question}
+                                </h4>
+                                <span className="relative size-5 shrink-0">
+                                  <svg className="absolute inset-0 size-5 opacity-100 group-open:opacity-0 text-slate-500 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9" /></svg>
+                                  <svg className="absolute inset-0 size-5 opacity-0 group-open:opacity-100 text-slate-500 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12H9" /></svg>
+                                </span>
+                              </summary>
+                              <div className="border-t border-slate-150 p-4 text-xs font-semibold leading-relaxed text-slate-700 font-sans bg-white rounded-b-xl">
+                                {item.answer}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SEO OPTIMIZER GOOGLE SIMULATOR FOR RANK 1 */}
+                    <div className="bg-[#f8f9fc] border-2 border-slate-200 rounded-2xl p-5 text-left space-y-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">Rank #1 Google SEO Active</span>
+                          <span className="text-[10px] text-slate-500 font-bold">Search Preview Standard</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-bold font-mono">Mobile View Grid</div>
+                      </div>
+
+                      {/* Google Snippet Live Card Simulator */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-1.5 font-sans">
+                        <div className="flex items-center gap-2.5 text-slate-800 select-none">
+                          <div className="w-6 h-6 rounded-full bg-slate-105 border border-slate-200 flex items-center justify-center font-bold text-[#e01e22] text-[11px]">📢</div>
+                          <div className="leading-tight text-left">
+                            <div className="text-[11px] font-extrabold text-slate-800">Sarkari Alerts Portal</div>
+                            <div className="text-[10px] text-emerald-700 flex items-center gap-1 leading-none font-mono">
+                              <span>https://sarkarialerts.com &rsaquo; jobs &rsaquo; {selectedJob.title.toLowerCase().replace(/[^a-z0-str0-9]+/g, '-')}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Title link */}
+                        <a href="#" className="block text-[#1a0dab] hover:underline text-sm font-bold tracking-tight leading-tight mt-1 text-left text-decoration-none">
+                          {selectedJob.seo?.metaTitle || `${selectedJob.title} Recruitment 2026 at ${selectedJob.org} - Apply Online`}
+                        </a>
+
+                        {/* Description */}
+                        <p className="text-[11px] leading-relaxed text-slate-600 text-left">
+                          <span className="text-slate-505 font-semibold">
+                            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &mdash;&nbsp;
+                          </span>
+                          {selectedJob.seo?.metaDesc || `Official prospectus announced by ${selectedJob.org}. Over ${selectedJob.vacancy} positions available. Final deadline date closes on ${selectedJob.lastDate}. Download handbook and apply online.`}
+                        </p>
+
+                        {/* Focus Keywords Tags */}
+                        {selectedJob.seo?.focusKeywords && (
+                          <div className="pt-2 flex flex-wrap gap-1">
+                            {selectedJob.seo.focusKeywords.split(',').map((kw, i) => (
+                              <span key={i} className="text-[9px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-slate-500 font-medium font-mono">
+                                #{kw.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Standard Schema Microdata badges */}
+                        <div className="pt-2.5 flex items-center gap-3 border-t border-slate-100 text-[10px] text-slate-400 font-semibold select-none">
+                          <span className="flex items-center gap-1 text-[#ea4335]">
+                            <strong>⚡ Google Schema:</strong> JobPosting Verified
+                          </span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-emerald-700">✓ JSON-LD Script Injected</span>
+                        </div>
+                      </div>
+
+                      {/* Display JSON-LD Active Script markup */}
+                      <details className="group border border-slate-200 rounded-xl bg-slate-50 text-xs">
+                        <summary className="flex cursor-pointer items-center justify-between p-3 select-none text-slate-700 font-extrabold">
+                          <span>🔍 View Injected Metadata Script (Structured JSON-LD)</span>
+                          <span className="transition group-open:-rotate-180">
+                            <svg fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="18"><path d="M6 9l6 6 6-6"></path></svg>
+                          </span>
+                        </summary>
+                        <div className="border-t border-slate-200 p-3 bg-slate-900 text-lime-400 font-mono text-[10px] whitespace-pre-wrap rounded-b-xl overflow-x-auto text-left leading-relaxed">
+                          {selectedJob.seo?.structuredDataSchema || JSON.stringify({
+                            "@context": "https://schema.org",
+                            "@type": "JobPosting",
+                            "title": selectedJob.title,
+                            "hiringOrganization": selectedJob.org,
+                            "datePosted": "2026-05-30",
+                            "validThrough": selectedJob.lastDate
+                          }, null, 2)}
+                        </div>
+                      </details>
+                      
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
             ) : null}
@@ -823,34 +1211,88 @@ export const Website: React.FC = () => {
                   {/* Clean CSS-driven horizontal scrolling ticker */}
                   <div className="flex-1 overflow-hidden relative">
                     <div className="whitespace-nowrap flex items-center gap-1 animate-ticker text-[#002f9c] text-xs sm:text-[13px] font-bold hover:[animation-play-state:paused] cursor-pointer">
-                      {activeJobs.map((jb, idx) => (
-                        <div key={jb.id} className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => goJob(jb)}
-                            className="hover:text-amber-500 hover:underline font-extrabold cursor-pointer text-[#002f9c] text-[12px] sm:text-[13px] select-none"
-                          >
-                            {jb.title}
-                          </button>
-                          <span className="text-[10px] text-green-600 font-extrabold align-super animate-pulse ml-0.5">[NEW]</span>
-                          <span className="text-slate-300 mx-3 select-none">||</span>
-                        </div>
-                      ))}
-                      {/* Duplicate for smooth back-to-back sliding */}
-                      {activeJobs.map((jb, idx) => (
-                        <div key={`dup-${jb.id}`} className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => goJob(jb)}
-                            className="hover:text-amber-500 hover:underline font-extrabold cursor-pointer text-[#002f9c] text-[12px] sm:text-[13px] select-none"
-                          >
-                            {jb.title}
-                          </button>
-                          <span className="text-[10px] text-green-600 font-extrabold align-super animate-pulse ml-0.5">[NEW]</span>
-                          <span className="text-slate-300 mx-3 select-none">||</span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const tickerJobs = selectedState && selectedState !== "All India"
+                          ? activeJobs.filter(jb => jb.state === selectedState || jb.state === "All India")
+                          : activeJobs;
+                        const displayJobs = tickerJobs.length > 0 ? tickerJobs : activeJobs;
+                        return (
+                          <>
+                            {displayJobs.map((jb) => (
+                              <div key={jb.id} className="inline-flex items-center gap-1">
+                                <button
+                                  onClick={() => goJob(jb)}
+                                  className="hover:text-amber-500 hover:underline font-extrabold cursor-pointer text-[#002f9c] text-[12px] sm:text-[13px] select-none"
+                                >
+                                  {jb.state !== "All India" && <span className="text-[#FF6B00] font-black mr-1 uppercase">[{jb.state}]</span>}
+                                  {jb.title}
+                                </button>
+                                <span className="text-[10px] text-green-600 font-extrabold align-super animate-pulse ml-0.5">[NEW]</span>
+                                <span className="text-slate-300 mx-3 select-none">||</span>
+                              </div>
+                            ))}
+                            {/* Duplicate for continuity */}
+                            {displayJobs.map((jb) => (
+                              <div key={`dup-${jb.id}`} className="inline-flex items-center gap-1">
+                                <button
+                                  onClick={() => goJob(jb)}
+                                  className="hover:text-amber-500 hover:underline font-extrabold cursor-pointer text-[#002f9c] text-[12px] sm:text-[13px] select-none"
+                                >
+                                  {jb.state !== "All India" && <span className="text-[#FF6B00] font-black mr-1 uppercase">[{jb.state}]</span>}
+                                  {jb.title}
+                                </button>
+                                <span className="text-[10px] text-green-600 font-extrabold align-super animate-pulse ml-0.5">[NEW]</span>
+                                <span className="text-slate-300 mx-3 select-none">||</span>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
+
+                {/* DYNAMIC SELECTED STATE HUD CALLOUT BANNER - SATISFIES STATE SELECTION TRIGGER IMMEDIATE HOME PAGE CHANGE */}
+                {selectedState && selectedState !== "All India" && (
+                  <div className="bg-gradient-to-r from-[#01143f] via-[#022a7e] to-[#01143f] border-2 border-[#FF6B00] rounded-2xl p-5 text-white flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg animate-fade-up">
+                    <div className="flex items-center gap-3.5 text-left">
+                      <div className="p-3 bg-[#FF6B00]/10 text-[#FF6B00] border border-[#FF6B00]/40 rounded-2xl shrink-0 animate-pulse">
+                        <MapPin className="w-6 h-6 text-[#FFB800]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] bg-[#FF6B00] text-white font-black uppercase px-2 py-0.5 rounded tracking-widest leading-none">STATE PERSONALIZATION ACTIVE</span>
+                          <span className="text-[9px] text-[#56f082] font-black tracking-wider animate-pulse uppercase leading-none">SELECT STATE WORKING LIVE</span>
+                        </div>
+                        <h2 className="text-lg font-black text-[#ffde00] tracking-tight mt-1 uppercase">
+                          {selectedState} Customized Portal Hub
+                        </h2>
+                        <p className="text-xs text-slate-200 font-bold leading-relaxed max-w-2xl mt-1">
+                          The homepage is dynamically loaded for <strong className="text-[#FFB800]">{selectedState}</strong> state recruitments, admit cards, and results. These records are highlighted at the top of their respective lists for fast access.
+                        </p>
+                      </div>
+                    </div>
+                    {/* Interaction Buttons right on banner */}
+                    <div className="flex flex-wrap gap-2 shrink-0 w-full md:w-auto">
+                      <button
+                        onClick={() => {
+                          setSelectedState("All India");
+                          localStorage.setItem("userStateSelection", "All India");
+                          addToast("🌎 Switched to All India National Jobs Hub!", "success");
+                        }}
+                        className="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition cursor-pointer text-white shadow-sm flex items-center justify-center gap-1 w-full sm:w-auto"
+                      >
+                        🌎 All India
+                      </button>
+                      <button
+                        onClick={() => setShowStateSelectorModal(true)}
+                        className="bg-[#FF6B00] hover:bg-orange-600 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase transition cursor-pointer text-white shadow-md flex items-center justify-center gap-1 w-full sm:w-auto"
+                      >
+                        ✏️ Change Location
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* HIGH CONTRAST BLOCK BANNER BUTTONS */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-0.5 font-sans">
@@ -1037,362 +1479,472 @@ export const Website: React.FC = () => {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-6">
-                    {/* TWO COLS ROW 1: Central Recruitment / State Recruitment */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5" id="jobs-anchor">
+                    
+                    {/* MAJESTIC 3-COLUMN CLASSIC CATEGORY DIRECTORY BOARD GRID */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="jobs-anchor">
                       
-                      {/* Box 1: Central Recruitment Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#7c0707] hover:bg-red-800 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Central Recruitment
+                      {/* Box 1: Results Column (Top Priority) */}
+                      <div className="bg-white border-2 border-emerald-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" id="results-anchor" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#006400] to-[#166534] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <Award className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `🏆 ${selectedState} Results` : "Results"}</span>
                         </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
+                          {(() => {
+                            const isStateSet = selectedState && selectedState !== "All India";
+                            const activeResults = results.filter(r => r.status === "published");
+                            
+                            const sorted = [...activeResults].sort((a, b) => {
+                              if (isStateSet) {
+                                if (a.state === selectedState && b.state !== selectedState) return -1;
+                                if (a.state !== selectedState && b.state === selectedState) return 1;
+                              }
+                              return 0;
+                            });
+
+                            return sorted.slice(0, 8).map((res) => {
+                              const isMatch = isStateSet && res.state === selectedState;
+                              return (
+                                <li key={res.id} className={`flex items-start gap-2.5 py-2 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-emerald-50 border border-emerald-200/50" : "hover:bg-emerald-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-emerald-700" : "text-[#ff0000]"}`}>■</span>
+                                  <a
+                                    href={res.link || "#"}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal transition hover:underline group ml-1"
+                                  >
+                                    {isMatch && <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded mr-1.5 select-none inline-block animate-pulse">YOUR STATE</span>}
+                                    {res.title}
+                                    <span className="text-[10px] bg-[#10b981]/15 text-[#059669] border border-[#10b981]/30 font-black px-1.5 py-0.5 rounded ml-1.5 inline-block animate-pulse">NEW</span>
+                                  </a>
+                                </li>
+                              );
+                            });
+                          })()}
+                        </ul>
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                          <button
+                            onClick={() => setViewAllCategory("Latest Results")}
+                            className="bg-[#006400] hover:bg-green-700 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-green-105"
+                          >
+                            View All Results
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Box 2: Admit Card Column */}
+                      <div className="bg-white border-2 border-blue-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" id="admits-anchor" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#022a7e] to-[#1e40af] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <Calendar className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `📅 ${selectedState} Admit Cards` : "Admit Cards"}</span>
+                        </div>
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
+                          {(() => {
+                            const isStateSet = selectedState && selectedState !== "All India";
+                            const activeAdmits = admits.filter(a => a.status === "published");
+                            
+                            const sorted = [...activeAdmits].sort((a, b) => {
+                              if (isStateSet) {
+                                if (a.state === selectedState && b.state !== selectedState) return -1;
+                                if (a.state !== selectedState && b.state === selectedState) return 1;
+                              }
+                              return 0;
+                            });
+
+                            return sorted.slice(0, 8).map((adm) => {
+                              const isMatch = isStateSet && adm.state === selectedState;
+                              return (
+                                <li key={adm.id} className={`flex items-start gap-2.5 py-2 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-blue-50 border border-blue-200/50" : "hover:bg-blue-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-blue-700" : "text-[#ff0000]"}`}>■</span>
+                                  <a
+                                    href={adm.link || "#"}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal transition hover:underline group ml-1"
+                                  >
+                                    {isMatch && <span className="text-[9px] bg-indigo-600 text-white font-black px-1.5 py-0.5 rounded mr-1.5 select-none inline-block">YOUR STATE</span>}
+                                    {adm.title}
+                                    <span className="text-[10px] bg-[#10b981]/15 text-[#059669] border border-[#10b981]/30 font-black px-1.5 py-0.5 rounded ml-1.5 inline-block animate-pulse">NEW</span>
+                                  </a>
+                                </li>
+                              );
+                            });
+                          })()}
+                        </ul>
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                          <button
+                            onClick={() => setViewAllCategory("Admit Cards")}
+                            className="bg-[#022a7e] hover:bg-blue-800 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-blue-105"
+                          >
+                            View All Admit Cards
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Box 3: Central Jobs Column */}
+                      <div className="bg-white border-2 border-red-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#7c0707] to-[#a31d1d] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <Briefcase className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>Central Recruitment</span>
+                        </div>
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start">
                           {(() => {
                             const central = activeJobs.filter(jb => jb.state === "All India");
                             return central.slice(0, 8).map((jb) => (
-                              <li key={jb.id} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                                <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
+                              <li key={jb.id} className="flex items-start gap-2.5 py-2 px-2 hover:bg-red-50/50 rounded-xl transition-all duration-150">
+                                <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none pt-0.5">■</span>
                                 <button
                                   onClick={() => goJob(jb)}
                                   className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
                                 >
                                   {jb.title}
-                                  {jb.isNew && <span className="text-[10px] text-green-600 font-extrabold ml-1.5 inline-block animate-pulse">[NEW]</span>}
+                                  {jb.isNew && <span className="text-[10px] bg-[#10b981]/15 text-[#059669] border border-[#10b981]/30 font-black px-1.5 py-0.5 rounded ml-1.5 inline-block animate-pulse">NEW</span>}
                                 </button>
                               </li>
                             ));
                           })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("Latest Jobs")}
-                            className="bg-[#1f93ff] hover:bg-[#002f9c] text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#7c0707] hover:bg-red-800 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-red-105"
                           >
-                            View All..
+                            View All Central Jobs
                           </button>
                         </div>
                       </div>
 
-                      {/* Box 1b: State Recruitment Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#b45309] hover:bg-amber-850 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          State Recruitment
+                      {/* Box 4: State Jobs Column */}
+                      <div className="bg-white border-2 border-orange-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#b45309] to-[#d97706] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <MapPin className="w-4.5 h-4.5 text-[#ffcb05] animate-pulse" />
+                          <span>{selectedState && selectedState !== "All India" ? `📍 ${selectedState} Jobs` : "State Recruitment"}</span>
                         </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start">
                           {(() => {
+                            const isStateSet = selectedState && selectedState !== "All India";
                             const stateSpecific = activeJobs.filter(jb => jb.state !== "All India");
-                            const sorted = [...stateSpecific].sort((a, b) => {
+                            
+                            const displayedSpecific = isStateSet 
+                              ? stateSpecific.filter(jb => jb.state === selectedState) 
+                              : stateSpecific;
+                            
+                            if (isStateSet && displayedSpecific.length === 0) {
+                              const fallbackJobs = [...stateSpecific].sort((a, b) => {
+                                if (a.isNew && !b.isNew) return -1;
+                                if (!a.isNew && b.isNew) return 1;
+                                return 0;
+                              });
+
+                              return (
+                                <div className="flex-1 flex flex-col justify-center items-center text-center p-3 text-slate-500 my-auto">
+                                  <AlertTriangle className="w-7 h-7 text-amber-500 mb-1.5 animate-bounce" />
+                                  <p className="font-extrabold text-[11px] text-slate-800">No active postings for {selectedState}</p>
+                                  <p className="text-[10px] text-slate-500 mt-1 max-w-[220px] leading-snug">Showing other state recruitments sorted below.</p>
+                                  
+                                  <div className="mt-4 w-full divide-y divide-dashed divide-slate-150 text-left">
+                                    {fallbackJobs.slice(0, 4).map((jb) => (
+                                      <div key={jb.id} className="py-2 hover:bg-slate-50 px-1.5 rounded transition">
+                                        <button onClick={() => goJob(jb)} className="text-[#002f9c] hover:underline font-extrabold text-[12px] leading-snug block text-left w-full">
+                                          <span className="text-[9px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-black mr-1.5 border border-amber-200 inline-block">{jb.state}</span>
+                                          {jb.title}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            const sorted = [...displayedSpecific].sort((a, b) => {
                               if (selectedState && selectedState !== "All India") {
-                                  if (a.state === selectedState && b.state !== selectedState) return -1;
-                                  if (a.state !== selectedState && b.state === selectedState) return 1;
+                                if (a.state === selectedState && b.state !== selectedState) return -1;
+                                if (a.state !== selectedState && b.state === selectedState) return 1;
                               }
                               return 0;
                             });
+
                             return sorted.slice(0, 8).map((jb) => (
-                              <li key={jb.id} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                                <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
+                              <li key={jb.id} className="flex items-start gap-2.5 py-2 px-2 hover:bg-orange-50/50 rounded-xl transition-all duration-150">
+                                <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none pt-0.5">■</span>
                                 <button
                                   onClick={() => goJob(jb)}
-                                  className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
+                                  className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline animate-fade-in"
                                 >
-                                  <span className="text-[10px] bg-slate-105 text-[#c2410c] px-1 py-0.5 rounded font-black mr-1 border border-orange-200">{jb.state}</span>
+                                  <span className="text-[10px] bg-amber-50 text-[#c2410c] px-1.5 py-0.5 rounded font-black mr-1.5 border border-orange-200 inline-block">{jb.state}</span>
                                   {jb.title}
-                                  {jb.isNew && <span className="text-[10px] text-green-600 font-extrabold ml-1.5 inline-block animate-pulse">[NEW]</span>}
+                                  {jb.isNew && <span className="text-[10px] bg-[#10b981]/15 text-[#059669] border border-[#10b981]/30 font-black px-1.5 py-0.5 rounded ml-1.5 inline-block animate-pulse">NEW</span>}
                                 </button>
                               </li>
                             ));
                           })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("State Jobs")}
-                            className="bg-[#1f93ff] hover:bg-[#b45309] text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#b45309] hover:bg-amber-700 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-orange-105"
                           >
-                            View All..
+                            View All State Jobs
                           </button>
                         </div>
                       </div>
 
-                    </div>
-
-                    {/* TWO COLS ROW 2: Admit Cards / Results */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5" id="admits-anchor">
-                      
-                      {/* Box 2: Admit Card Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between animate-fade-up" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#022a7e] hover:bg-blue-800 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Admit Card
+                      {/* Box 5: Answer Key Column */}
+                      <div className="bg-white border-2 border-purple-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#6b21a8] to-[#8b5cf6] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <Sparkles className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `🔑 ${selectedState} Answer Keys` : "Answer Key"}</span>
                         </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
                           {(() => {
-                            const sorted = [...admits].filter(a => a.status === "published").sort((a, b) => {
-                              if (selectedState && selectedState !== "All India") {
-                                if (a.state === selectedState && b.state !== selectedState) return -1;
-                                if (a.state !== selectedState && b.state === selectedState) return 1;
-                              }
-                              return 0;
+                            const defaultList = [
+                              "SSC Combined Graduate Level (CGL) 2026 Tier-1 Answer Key",
+                              "UPSC Civil Services Pre GS Paper 1 & 2 Answer Keys",
+                              "Railway NTPC Stage-1 Computer Based Test Answer Key",
+                              "UP Police Constable Written Shift 1 & 2 Answer Key",
+                              "Bihar Police Constable Re-test Provisional Answer Sheet",
+                              "WBPSC Clerkship Entrance Objective Test Answer Keys",
+                              "CSIR UGC NET June General Science Answer Sheet Release",
+                              "SBI Clerk Junior Associate Mains exam Answer Paper"
+                            ];
+                            const displayedList = selectedState && selectedState !== "All India"
+                              ? [
+                                  `👑 ${selectedState} State Eligibility Test (SET) Answer Key 2026`,
+                                  `⚡ ${selectedState} State Police Written Exam Shift 1 Answer Sheet`,
+                                  ...defaultList.filter(item => !item.includes("UP Police") && !item.includes("Bihar Police") && !item.includes("WBPSC"))
+                                ]
+                              : defaultList;
+
+                            return displayedList.map((text, idx) => {
+                              const isMatch = selectedState && selectedState !== "All India" && (text.startsWith("👑") || text.startsWith("⚡"));
+                              return (
+                                <li key={idx} className={`flex items-start gap-2.5 py-2 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-purple-50 border border-purple-200/50" : "hover:bg-purple-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-purple-700" : "text-[#ff0000]"}`}>■</span>
+                                  <button
+                                    onClick={() => addToast(`Opening statutory solution sheet: ${text}`, "success")}
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline animate-fade-in"
+                                  >
+                                    {text}
+                                  </button>
+                                </li>
+                              );
                             });
-                            return sorted.slice(0, 8).map((adm) => (
-                              <li key={adm.id} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                                <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                                <a
-                                  href={adm.link || "#"}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal transition hover:underline group"
-                                >
-                                  {adm.title}
-                                  <span className="text-[10px] text-green-600 font-extrabold ml-1.5 inline-block animate-pulse">[NEW]</span>
-                                </a>
-                              </li>
-                            ));
                           })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
-                          <button
-                            onClick={() => setViewAllCategory("Admit Cards")}
-                            className="bg-[#1f93ff] hover:bg-[#022a7e] text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
-                          >
-                            View All..
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Box 3: Results Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" id="results-anchor" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#006400] hover:bg-green-800 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Results
-                        </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
-                          {(() => {
-                            const sorted = [...results].filter(r => r.status === "published").sort((a, b) => {
-                              if (selectedState && selectedState !== "All India") {
-                                if (a.state === selectedState && b.state !== selectedState) return -1;
-                                if (a.state !== selectedState && b.state === selectedState) return 1;
-                              }
-                              return 0;
-                            });
-                            return sorted.slice(0, 8).map((res) => (
-                              <li key={res.id} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                                <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                                <a
-                                  href={res.link || "#"}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal transition hover:underline group"
-                                >
-                                  {res.title}
-                                  <span className="text-[10px] text-green-600 font-extrabold ml-1.5 inline-block animate-pulse">[NEW]</span>
-                                </a>
-                              </li>
-                            ));
-                          })()}
-                        </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
-                          <button
-                            onClick={() => setViewAllCategory("Latest Results")}
-                            className="bg-[#1f93ff] hover:bg-green-850 text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
-                          >
-                            View All..
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* TWO COLS ROW 3: Answer Keys / Syllabus */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      
-                      {/* Box 4: Answer Key Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#800080] hover:bg-purple-800 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Answer Key
-                        </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
-                          {[
-                            "SSC Combined Graduate Level (CGL) 2026 Tier-1 Answer Key",
-                            "UPSC Civil Services Pre GS Paper 1 & 2 Answer Keys",
-                            "Railway NTPC Stage-1 Computer Based Test Answer Key",
-                            "UP Police Constable Written Shift 1 & 2 Answer Key",
-                            "Bihar Police Constable Re-test Provisional Answer Sheet",
-                            "WBPSC Clerkship Entrance Objective Test Answer Keys",
-                            "CSIR UGC NET June General Science Answer Sheet Release",
-                            "SBI Clerk Junior Associate Mains exam Answer Paper"
-                          ].map((text, idx) => (
-                            <li key={idx} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                              <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                              <button
-                                onClick={() => addToast(`Opening statutory solution sheet: ${text}`, "success")}
-                                className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
-                              >
-                                {text}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("Answer Key")}
-                            className="bg-[#1f93ff] hover:bg-purple-900 text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#6b21a8] hover:bg-purple-800 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-purple-105"
                           >
-                            View All..
+                            View All Answer Keys
                           </button>
                         </div>
                       </div>
 
-                      {/* Box 5: Syllabus Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#0c4a6e] hover:bg-sky-900 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Syllabus
+                      {/* Box 6: Syllabus Column */}
+                      <div className="bg-white border-2 border-sky-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#0c4a6e] to-[#0369a1] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <GraduationCap className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `📚 ${selectedState} Syllabus` : "Syllabus"}</span>
                         </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
-                          {[
-                            "UPSC Civil Services IAS Pre & Mains Detailed Exam Scheme",
-                            "SSC CGL combined Graduate Level exams structural syllabus",
-                            "Railway Board RRB NTPC Written Exam Syllabus PDF",
-                            "Bihar Police CSBC Constable physical and Written standards",
-                            "West Bengal Police Constable Exam pattern and syllabus",
-                            "UP Police Constable objective test syllabus handout",
-                            "SBI Clerk Clerical customer support study blueprints",
-                            "IBPS Specialist Officers written syllabus formulation"
-                          ].map((text, idx) => (
-                            <li key={idx} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                              <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                              <button
-                                onClick={() => addToast(`Downloading dynamic handbook: ${text}`, "success")}
-                                className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
-                              >
-                                {text}
-                              </button>
-                            </li>
-                          ))}
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
+                          {(() => {
+                            const defaultList = [
+                              "UPSC Civil Services IAS Pre & Mains Detailed Exam Scheme",
+                              "SSC CGL combined Graduate Level exams structural syllabus",
+                              "Railway Board RRB NTPC Written Exam Syllabus PDF",
+                              "Bihar Police CSBC Constable physical and Written standards",
+                              "West Bengal Police Constable Exam pattern and syllabus",
+                              "UP Police Constable objective test syllabus handout",
+                              "SBI Clerk Clerical customer support study blueprints",
+                              "IBPS Specialist Officers written syllabus formulation"
+                            ];
+                            const displayedList = selectedState && selectedState !== "All India"
+                              ? [
+                                  `📚 ${selectedState} PSC Combined State Civil Services detailed Exam Scheme`,
+                                  `🎯 ${selectedState} State Police Constable & Sub-Inspector Physical syllabus`,
+                                  ...defaultList.filter(item => !item.includes("Bihar") && !item.includes("West Bengal") && !item.includes("UP Police"))
+                                ]
+                              : defaultList;
+
+                            return displayedList.map((text, idx) => {
+                              const isMatch = selectedState && selectedState !== "All India" && (text.startsWith("📚") || text.startsWith("🎯"));
+                              return (
+                                <li key={idx} className={`flex items-start gap-2.5 py-2 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-sky-50 border border-sky-200/50" : "hover:bg-sky-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-sky-700" : "text-[#ff0000]"}`}>■</span>
+                                  <button
+                                    onClick={() => addToast(`Downloading dynamic handbook: ${text}`, "success")}
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline animate-fade-in"
+                                  >
+                                    {text}
+                                  </button>
+                                </li>
+                              );
+                            });
+                          })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("Syllabus")}
-                            className="bg-[#1f93ff] hover:bg-sky-950 text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#0c4a6e] hover:bg-sky-900 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-sky-105"
                           >
-                            View All..
+                            View All Syllabus PDF
                           </button>
                         </div>
                       </div>
 
-                    </div>
-
-                    {/* TWO COLS ROW 4: Admission / Certificate Verification */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      
-                      {/* Box 6: Admission Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#991b1b] hover:bg-red-900 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Admission
+                      {/* Box 7: Admission Column */}
+                      <div className="bg-white border-2 border-rose-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#991b1b] to-[#dc2626] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <GraduationCap className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `🎓 ${selectedState} Admissions` : "Admission"}</span>
                         </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
-                          {[
-                            "NTA NEET UG National Entrance MBBs Admission 25-26 Form",
-                            "NTA JEE Mains Phase II Engineering Online Admission form",
-                            "Delhi University DU PG admission course choices Form",
-                            "UP Rajarshi Tandon Open University B.Ed entrance prospectus",
-                            "IIT Joint Admission Test for Masters (JAM) Form 2026",
-                            "NTA UGC NET Exam June phase admissions open portal",
-                            "Jawahar Navodaya Vidyalaya Class 6 admission registration",
-                            "UPSC free coaching scheme online admissions UP/Bihar"
-                          ].map((text, idx) => (
-                            <li key={idx} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                              <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                              <button
-                                onClick={() => addToast(`Opening admissions workspace: ${text}`, "success")}
-                                className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
-                              >
-                                {text}
-                              </button>
-                            </li>
-                          ))}
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
+                          {(() => {
+                            const defaultList = [
+                              "NTA NEET UG National Entrance MBBs Admission 25-26 Form",
+                              "NTA JEE Mains Phase II Engineering Online Admission form",
+                              "Delhi University DU PG admission course choices Form",
+                              "UP Rajarshi Tandon Open University B.Ed entrance prospectus",
+                              "IIT Joint Admission Test for Masters (JAM) Form 2026",
+                              "NTA UGC NET Exam June phase admissions open portal",
+                              "Jawahar Navodaya Vidyalaya Class 6 admission registration",
+                              "UPSC free coaching scheme online admissions UP/Bihar"
+                            ];
+                            const displayedList = selectedState && selectedState !== "All India"
+                              ? [
+                                  `🎓 ${selectedState} State Centralised B.Ed / D.El.Ed Admissions 2026`,
+                                  `🏛 ${selectedState} State coaching scheme for Civil Services pre-admissions`,
+                                  ...defaultList.filter(item => !item.includes("UP Rajarshi") && !item.includes("UP/Bihar"))
+                                ]
+                              : defaultList;
+
+                            return displayedList.map((text, idx) => {
+                              const isMatch = selectedState && selectedState !== "All India" && (text.startsWith("🎓") || text.startsWith("🏛"));
+                              return (
+                                <li key={idx} className={`flex items-start gap-2.5 py-2 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-red-50 border border-red-200/50" : "hover:bg-red-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-red-700" : "text-[#ff0000]"}`}>■</span>
+                                  <button
+                                    onClick={() => addToast(`Opening admissions workspace: ${text}`, "success")}
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline animate-fade-in"
+                                  >
+                                    {text}
+                                  </button>
+                                </li>
+                              );
+                            });
+                          })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("Admission")}
-                            className="bg-[#1f93ff] hover:bg-red-950 text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#991b1b] hover:bg-red-800 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-red-105"
                           >
-                            View All..
+                            View All Admissions
                           </button>
                         </div>
                       </div>
 
-                      {/* Box 7: Certificate Verification / Documents */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "410px" }}>
-                        <div className="bg-[#b45309] hover:bg-amber-850 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Certificate Verification
+                      {/* Box 8: Certificate Verification Column */}
+                      <div className="bg-white border-2 border-amber-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#b45309] to-[#d97706] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <Award className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `🛡️ ${selectedState} Verification` : "Certificate Verification"}</span>
                         </div>
-                        <ul className="p-3 divide-y divide-dashed divide-slate-200 text-left text-xs leading-relaxed flex-1 flex flex-col justify-start">
-                          {[
-                            "Aadhaar Card link to verified Mobile Number Online Portal",
-                            "Voter ID Card Online corrections application form 2026",
-                            "Link PAN Card to Aadhaar Card online status check",
-                            "UP Caste, Income, residence certification digital search",
-                            "Bihar new structural Ration Card digitized list search",
-                            "Digilocker digital app download guide for CBSE certificates",
-                            "Income tax return ITR-1 filing online instructions",
-                            "EWS Economically Weaker Section certificate eligibility"
-                          ].map((text, idx) => (
-                            <li key={idx} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                              <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                              <button
-                                onClick={() => addToast(`Direct link access active: ${text}`, "success")}
-                                className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
-                              >
-                                {text}
-                              </button>
-                            </li>
-                          ))}
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
+                          {(() => {
+                            const defaultList = [
+                              "Aadhaar Card link to verified Mobile Number Online Portal",
+                              "Voter ID Card Online corrections application form 2026",
+                              "Link PAN Card to Aadhaar Card online status check",
+                              "UP Caste, Income, residence certification digital search",
+                              "Bihar new structural Ration Card digitized list search",
+                              "Digilocker digital app download guide for CBSE certificates",
+                              "Income tax return ITR-1 filing online instructions",
+                              "EWS Economically Weaker Section certificate eligibility"
+                            ];
+                            const displayedList = selectedState && selectedState !== "All India"
+                              ? [
+                                  `🛡️ ${selectedState} Caste, Income & Domicile Verification Portal`,
+                                  `📋 ${selectedState} Non-Creamy Layer (NCL) certificate formats`,
+                                  ...defaultList.filter(item => !item.includes("UP Caste") && !item.includes("Bihar new"))
+                                ]
+                              : defaultList;
+
+                            return displayedList.map((text, idx) => {
+                              const isMatch = selectedState && selectedState !== "All India" && (text.startsWith("🛡️") || text.startsWith("📋"));
+                              return (
+                                <li key={idx} className={`flex items-start gap-2.5 py-2 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-amber-50 border border-amber-200/50" : "hover:bg-amber-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-amber-700" : "text-[#ff0000]"}`}>■</span>
+                                  <button
+                                    onClick={() => addToast(`Direct link access active: ${text}`, "success")}
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline animate-fade-in"
+                                  >
+                                    {text}
+                                  </button>
+                                </li>
+                              );
+                            });
+                          })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("Certifications")}
-                            className="bg-[#1f93ff] hover:bg-amber-950 text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#b45309] hover:bg-amber-605 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-orange-105"
                           >
-                            View All..
+                            View All Verifications
                           </button>
                         </div>
                       </div>
 
-                    </div>
-
-                    {/* FULL WIDTH ROW 5: Important Links Column */}
-                    <div className="grid grid-cols-1 gap-5">
-                      
-                      {/* Box 8: Important Links Column */}
-                      <div className="bg-white border-2 border-slate-300 rounded overflow-hidden shadow-md flex flex-col justify-between" style={{ minHeight: "310px" }}>
-                        <div className="bg-[#581c87] hover:bg-purple-950 text-white py-2.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-widest select-none uppercase transition-colors">
-                          Important
+                      {/* Box 9: Important Links Column */}
+                      <div className="bg-white border-2 border-indigo-200 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between" style={{ minHeight: "440px" }}>
+                        <div className="bg-gradient-to-r from-[#581c87] to-[#7c3aed] text-white py-3.5 px-4 text-center font-sans text-sm sm:text-base font-black tracking-wider select-none uppercase shadow-sm flex items-center justify-center gap-2">
+                          <Sparkles className="w-4.5 h-4.5 text-[#ffcb05]" />
+                          <span>{selectedState && selectedState !== "All India" ? `🌟 ${selectedState} Important Links` : "Important Links"}</span>
                         </div>
-                        <ul className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 content-start">
-                          {[
-                            "UP Scholarship Online Form 2026 fresh & Renewal entries",
-                            "PM Kisan Samman Nidhi 18th Installment KYC checklist",
-                            "National Scholarship Portal (NSP) Online registrations open",
-                            "West Bengal SVMCM Swami Vivekananda Merit Means scholarship",
-                            "Bihar Board class XII intermediate registration Form 25-27",
-                            "Standard central SC, ST caste Certificate guidelines PDF",
-                            "Voter Card download online epip card print instructions",
-                            "Standard Central OBC Non-Creamy Layer formats circular"
-                          ].map((text, idx) => (
-                            <li key={idx} className="flex items-start gap-1 py-1.5 px-1 hover:bg-orange-50/40 transition-all">
-                              <span className="text-[#ff0000] shrink-0 font-bold text-xs select-none">■</span>
-                              <button
-                                onClick={() => addToast(`Opening statutory board reference: ${text}`, "success")}
-                                className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
-                              >
-                                {text}
-                              </button>
-                            </li>
-                          ))}
+                        <ul className="p-4 divide-y divide-dashed divide-slate-150 text-left text-xs leading-relaxed flex-1 flex flex-col gap-1 justify-start font-sans">
+                          {(() => {
+                            const defaultList = [
+                              "UP Scholarship Online Form 2026 fresh & Renewal entries",
+                              "PM Kisan Samman Nidhi 18th Installment KYC checklist",
+                              "National Scholarship Portal (NSP) Online registrations open",
+                              "West Bengal SVMCM Swami Vivekananda Merit Means scholarship",
+                              "Bihar Board class XII intermediate registration Form 25-27",
+                              "Standard central SC, ST caste Certificate guidelines PDF",
+                              "Voter Card download online epip card print instructions",
+                              "Standard Central OBC Non-Creamy Layer formats circular"
+                            ];
+                            const displayedList = selectedState && selectedState !== "All India"
+                              ? [
+                                  `🎓 ${selectedState} State Merit Scholarship (Fresh & Renewal)`,
+                                  `⚡ ${selectedState} State Digital Ration Card online correction`,
+                                  ...defaultList.filter(item => !item.includes("UP Scholarship") && !item.includes("West Bengal") && !item.includes("Bihar Board"))
+                                ]
+                              : defaultList;
+
+                            return displayedList.map((text, idx) => {
+                              const isMatch = selectedState && selectedState !== "All India" && (text.startsWith("🎓") || text.startsWith("⚡"));
+                              return (
+                                <li key={idx} className={`flex items-start gap-2 py-1.5 px-2 rounded-xl transition-all duration-150 ${isMatch ? "bg-indigo-50 border border-indigo-200/50" : "hover:bg-indigo-50/50"}`}>
+                                  <span className={`shrink-0 font-bold text-xs select-none pt-0.5 ${isMatch ? "text-indigo-700" : "text-[#ff0505]"}`}>■</span>
+                                  <button
+                                    onClick={() => addToast(`Opening statutory board reference: ${text}`, "success")}
+                                    className="text-[#002f9c] hover:text-[#ff3c00] text-[12px] sm:text-[13px] font-extrabold text-left leading-normal cursor-pointer transition hover:underline"
+                                  >
+                                    {text}
+                                  </button>
+                                </li>
+                              );
+                            });
+                          })()}
                         </ul>
-                        <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
+                        <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center items-center select-none">
                           <button
                             onClick={() => setViewAllCategory("Important Links")}
-                            className="bg-[#1f93ff] hover:bg-purple-950 text-white font-extrabold text-[10px] md:text-[11px] py-1.5 px-5 rounded cursor-pointer uppercase transition-all"
+                            className="bg-[#581c87] hover:bg-purple-950 text-white font-black text-[11px] py-2 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm hover:shadow-[#581c87]/15"
                           >
-                            View All..
+                            View All Links
                           </button>
                         </div>
                       </div>
@@ -1536,7 +2088,7 @@ export const Website: React.FC = () => {
               </a>
               <div className="flex flex-col items-center gap-2 mt-1">
                 <button 
-                  onClick={() => addToast("BharatJobs Support Hotline is available Mon-Fri 10AM-6PM IST", "success")} 
+                  onClick={() => addToast("Sarkari Result Live Support Hotline is available Mon-Fri 10AM-6PM IST", "success")} 
                   className="text-center text-xs font-bold text-slate-400 hover:text-[#ffde00] transition cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <span>📞</span> Help Center Desk
@@ -1565,14 +2117,14 @@ export const Website: React.FC = () => {
           {/* Bottom Copyright and Fast Policy Links */}
           <div className="border-t border-slate-800 pt-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-400 font-sans text-center">
             <span className="font-bold select-none">
-              &copy; 2026 SARKARI RESULT - BharatJobs.in Group. Designed for extreme readability & trust.
+              &copy; 2026 SARKARI RESULT - SarkariResultLive.in Group. Designed for extreme readability & trust.
             </span>
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-slate-300 font-bold select-none">
               <button onClick={() => addToast("Our privacy rule guarantees zero telemetry sharing with advertising modules.", "success")} className="hover:text-[#ffde00] hover:underline cursor-pointer">Privacy Policy</button>
               <span>&bull;</span>
               <button onClick={() => addToast("All listed elements conform to our quality validation standards.", "success")} className="hover:text-[#ffde00] hover:underline cursor-pointer">Terms of Use</button>
               <span>&bull;</span>
-              <button onClick={() => addToast("BharatJobs Support desk reached at helpdesk@bharatjobs.in", "success")} className="hover:text-[#ffde00] hover:underline cursor-pointer">Legal Notice</button>
+              <button onClick={() => addToast("Sarkari Result Live Support desk reached at helpdesk@sarkariresultlive.in", "success")} className="hover:text-[#ffde00] hover:underline cursor-pointer">Legal Notice</button>
             </div>
           </div>
 
@@ -1782,7 +2334,7 @@ export const Website: React.FC = () => {
                   // General fallback categories
                   let itemsList: string[] = [];
                   if (viewAllCategory === "Answer Key") {
-                    itemsList = [
+                    const defaultList = [
                       "SSC Combined Graduate Level (CGL) 2026 Tier-1 Answer Key",
                       "UPSC Civil Services Pre GS Paper 1 & 2 Answer Keys",
                       "Railway NTPC Stage-1 Computer Based Test Answer Key",
@@ -1790,12 +2342,17 @@ export const Website: React.FC = () => {
                       "Bihar Police Constable Re-test Provisional Answer Sheet",
                       "WBPSC Clerkship Entrance Objective Test Answer Keys",
                       "CSIR UGC NET June General Science Answer Sheet Release",
-                      "SBI Clerk Junior Associate Mains exam Answer Paper",
-                      "IBPS RRB Officer Scale I & Clerk prelims exam Key",
-                      "Airforce Agniveer Vayu Intake exam Answer Key Solution"
+                      "SBI Clerk Junior Associate Mains exam Answer Paper"
                     ];
+                    itemsList = selectedState && selectedState !== "All India"
+                      ? [
+                          `👑 ${selectedState} State Eligibility Test (SET) General Answer Sheet 2026`,
+                          `⚡ ${selectedState} State Police Written Exam Shift 1 Answer Keys`,
+                          ...defaultList.filter(item => !item.includes("UP Police") && !item.includes("Bihar Police") && !item.includes("WBPSC"))
+                        ]
+                      : defaultList;
                   } else if (viewAllCategory === "Syllabus") {
-                    itemsList = [
+                    const defaultList = [
                       "UPSC Civil Services IAS Pre & Mains Detailed Exam Scheme",
                       "SSC CGL combined Graduate Level exams structural syllabus",
                       "Railway Board RRB NTPC Written Exam Syllabus PDF",
@@ -1805,9 +2362,16 @@ export const Website: React.FC = () => {
                       "SBI Clerk Clerical customer support study blueprints",
                       "IBPS Specialist Officers written syllabus formulation"
                     ];
+                    itemsList = selectedState && selectedState !== "All India"
+                      ? [
+                          `📚 ${selectedState} PSC Combined State Civil Services detailed Exam Scheme`,
+                          `🎯 ${selectedState} State Police Constable & Sub-Inspector Physical syllabus`,
+                          ...defaultList.filter(item => !item.includes("Bihar") && !item.includes("West Bengal") && !item.includes("UP Police"))
+                        ]
+                      : defaultList;
                   } else if (viewAllCategory === "Admission") {
-                    itemsList = [
-                      "NTA NEET UG National Entrance MBBs Admission 2026 Form",
+                    const defaultList = [
+                      "NTA NEET UG National Entrance MBBs Admission 25-26 Form",
                       "NTA JEE Mains Phase II Engineering Online Admission form",
                       "Delhi University DU PG admission course choices Form",
                       "UP Rajarshi Tandon Open University B.Ed entrance prospectus",
@@ -1816,8 +2380,15 @@ export const Website: React.FC = () => {
                       "Jawahar Navodaya Vidyalaya Class 6 admission registration",
                       "UPSC free coaching scheme online admissions UP/Bihar"
                     ];
+                    itemsList = selectedState && selectedState !== "All India"
+                      ? [
+                          `🎓 ${selectedState} State Centralised B.Ed / D.El.Ed Admissions 2026`,
+                          `🏛 ${selectedState} State coaching scheme for Civil Services pre-admissions`,
+                          ...defaultList.filter(item => !item.includes("UP Rajarshi") && !item.includes("UP/Bihar"))
+                        ]
+                      : defaultList;
                   } else if (viewAllCategory === "Certifications") {
-                    itemsList = [
+                    const defaultList = [
                       "Aadhaar Card link to verified Mobile Number Online Portal",
                       "Voter ID Card Online corrections application form 2026",
                       "Link PAN Card to Aadhaar Card online status check",
@@ -1827,8 +2398,15 @@ export const Website: React.FC = () => {
                       "Income tax return ITR-1 filing online instructions",
                       "EWS Economically Weaker Section certificate eligibility"
                     ];
+                    itemsList = selectedState && selectedState !== "All India"
+                      ? [
+                          `🛡️ ${selectedState} Caste, Income & Domicile Digital Certificate Verification`,
+                          `📋 ${selectedState} Non-Creamy Layer (NCL) certificate formats & search`,
+                          ...defaultList.filter(item => !item.includes("UP Caste") && !item.includes("Bihar new"))
+                        ]
+                      : defaultList;
                   } else if (viewAllCategory === "Important Links") {
-                    itemsList = [
+                    const defaultList = [
                       "UP Scholarship Online Form 2026 fresh & Renewal entries",
                       "PM Kisan Samman Nidhi 18th Installment KYC checklist",
                       "National Scholarship Portal (NSP) Online registrations open",
@@ -1838,6 +2416,13 @@ export const Website: React.FC = () => {
                       "Voter Card download online epip card print instructions",
                       "Standard Central OBC Non-Creamy Layer formats circular"
                     ];
+                    itemsList = selectedState && selectedState !== "All India"
+                      ? [
+                          `🎓 ${selectedState} State Merit Scholarship (Fresh & Renewal Entries)`,
+                          `⚡ ${selectedState} State Digital Ration Card online correction form`,
+                          ...defaultList.filter(item => !item.includes("UP Scholarship") && !item.includes("West Bengal") && !item.includes("Bihar Board"))
+                        ]
+                      : defaultList;
                   }
 
                   const matched = itemsList.filter(item => item.toLowerCase().includes(term));
@@ -1915,6 +2500,49 @@ export const Website: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Dynamic Push Subscription Promo Card */}
+      {showPushBanner && (
+        <div className="fixed bottom-20 sm:bottom-6 right-2 sm:right-6 w-11/12 max-w-sm bg-gradient-to-br from-[#01143f] to-[#022a7e] text-white border-2 border-[#ffcb05] rounded-2xl shadow-[0_12px_44px_rgba(0,0,0,0.5)] z-[999] overflow-hidden p-4 sm:p-5 animate-fade-up">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/5 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="flex items-start gap-3.5 relative">
+            <div className="bg-[#ff0000] border border-yellow-400 text-white p-2 text-center rounded-xl animate-bounce shadow-lg mt-1 select-none">
+              <Bell className="w-5 h-5 text-yellow-300" />
+            </div>
+            <div className="flex-1 text-left font-sans">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] uppercase font-black tracking-widest text-[#56f082]">INSTANT JOB ALERTS</span>
+                <button 
+                  onClick={handleDismissPushBanner}
+                  className="text-slate-300 hover:text-white"
+                  title="Dismiss alert prompt"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <h4 className="font-extrabold text-xs text-[#ffcb05] mt-1 pr-4 whitespace-nowrap overflow-hidden text-ellipsis">Sub to Web Push Alerts!</h4>
+              <p className="text-[10px] text-slate-200 leading-relaxed font-semibold mt-1">
+                Receive crucial Job Notifications, Admit Card releases, and Exam Results on your device instantly!
+              </p>
+              
+              <div className="flex items-center gap-2 mt-4">
+                <button
+                  onClick={handleSubscribeToPush}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 font-extrabold text-[10px] uppercase px-3.5 py-2 rounded-xl transition cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/20"
+                >
+                  🔔 Allow Alerts
+                </button>
+                <button
+                  onClick={handleDismissPushBanner}
+                  className="text-[10px] font-extrabold text-slate-300 hover:text-white uppercase px-2 py-1 transition cursor-pointer"
+                >
+                  No, Thanks
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

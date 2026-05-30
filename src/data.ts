@@ -520,9 +520,9 @@ export const INIT_ADMITS: AdmitCard[] = [
 export const DEFAULT_TICKER = "🚨 Latest Update: SSC CGL 2025 Combined Graduate Level Online forms are active til 15-June-2025. Apply now! | UP Police Constable Recruitment 60,244 vacancies last date extended to 30-June-2025. | Download UPSC IAS Civils Admission passes now. | Bihar Board class XII revised results uploaded.";
 
 export const DEFAULT_SETTINGS: SiteSettings = {
-  siteName: "BharatJobs",
+  siteName: "Sarkari Result Live",
   tagline: "India's No.1 Premium Interactive Government Job Notification Gateway",
-  email: "support@bharatjobs.in",
+  email: "support@sarkariresultlive.in",
   pubId: "ca-pub-9988220011554477",
   headerSlot: "8899775533",
   sidebarSlot: "1122334455"

@@ -3,7 +3,7 @@ import {
   Plus, Edit2, Trash2, LayoutDashboard, Briefcase, FileText, 
   Settings, ArrowLeft, Terminal, Sparkles, Check, CheckCircle, 
   AlertTriangle, CreditCard, Calendar, Shield, Activity, RefreshCw,
-  Search, X
+  Search, X, Bell
 } from "lucide-react";
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
@@ -18,8 +18,13 @@ export const AdminPanel: React.FC = () => {
   if (!context) return null;
 
   const { 
-    jobs, results, admits, ticker, siteSettings, setView, addToast, isLoading
+    jobs, results, admits, ticker, siteSettings, setView, addToast, isLoading,
+    pushSubscription, setPushSubscription, pushAlerts, setPushAlerts, sendPushAlertToClient
   } = context;
+
+  const currentUser = (context as any).currentUser;
+  const loginWithGoogle = (context as any).loginWithGoogle;
+  const logoutAdmin = (context as any).logoutAdmin;
 
   // Since context from App holds shared triggers, let's access setters by cast or type
   // Our App.tsx will declare the variables and setters in context so we can mutate cleanly!
@@ -32,10 +37,25 @@ export const AdminPanel: React.FC = () => {
   // Sidebar collapsed state
   const [collapsed, setCollapsed] = useState(false);
 
+  // Auto-collapse sidebar on smaller mobile/tablet screens for optimized grid layout space
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setCollapsed(true);
+    }
+  }, []);
+
   // Administrative path navigation router
   const [adminPage, setAdminPage] = useState<
-    "dashboard" | "add-job" | "jobs" | "results" | "admitcards" | "ticker" | "settings"
+    "dashboard" | "add-job" | "jobs" | "results" | "admitcards" | "ticker" | "settings" | "push"
   >("dashboard");
+
+  // Push notification custom draft composer state
+  const [pushForm, setPushForm] = useState({
+    title: "",
+    body: "",
+    category: "Central Jobs",
+    url: ""
+  });
 
   // Selection keys for edits
   const [editJobId, setEditJobId] = useState<number | null>(null);
@@ -140,7 +160,16 @@ export const AdminPanel: React.FC = () => {
 
   const triggerEditJob = (job: Job) => {
     setEditJobId(job.id);
-    setJobForm(job);
+    setJobForm({
+      ...job,
+      faq: job.faq || [],
+      seo: job.seo || {
+        metaTitle: "",
+        metaDesc: "",
+        focusKeywords: "",
+        structuredDataSchema: ""
+      }
+    });
     setAdminPage("add-job");
   };
 
@@ -411,6 +440,7 @@ export const AdminPanel: React.FC = () => {
               { id: "results", label: "Results Ledger", icon: <FileText className="w-4.5 h-4.5" /> },
               { id: "admitcards", label: "Admit Downloaders", icon: <Calendar className="w-4.5 h-4.5" /> },
               { id: "ticker", label: "Notice Marquee", icon: <Terminal className="w-4.5 h-4.5" /> },
+              { id: "push", label: "Push Broadcasts", icon: <Bell className="w-4.5 h-4.5" /> },
               { id: "settings", label: "Site Configuration", icon: <Settings className="w-4.5 h-4.5" /> }
             ].map((link) => {
               const active = adminPage === link.id;
@@ -437,18 +467,50 @@ export const AdminPanel: React.FC = () => {
           </nav>
         </div>
 
-        {/* Supervision login avatar at footer */}
+        {/* Supervision dynamic login avatar/warning at footer */}
         {!collapsed && (
-          <div className="p-4 border-t border-white/10 bg-black/15 flex items-center gap-3 h-16">
-            <div className="w-8 h-8 rounded-full bg-[#FF6B00] border border-white/25 flex items-center justify-center font-bold font-mono text-sm text-white">
-              SA
-            </div>
-            <div className="text-left leading-none">
-              <p className="text-xs font-bold text-white">Super Admin</p>
-              <span className="text-[8.5px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block animate-ping"></span> ONLINE
-              </span>
-            </div>
+          <div className="p-3.5 border-t border-white/10 bg-black/25 flex flex-col gap-2 min-h-[70px]">
+            {currentUser ? (
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-orange-500 border border-white/20 flex items-center justify-center font-bold font-mono text-xs text-white uppercase shadow-inner">
+                    {currentUser.email === "prokashmal799@gmail.com" ? "SA" : (currentUser.email?.slice(0, 2) || "AD")}
+                  </div>
+                  <div className="text-left leading-none max-w-[100px]">
+                    <p className="text-[10px] font-bold text-white truncate" title={currentUser.email || "Active Admin"}>
+                      {currentUser.displayName || currentUser.email?.split("@")[0] || "Admin Session"}
+                    </p>
+                    {currentUser.email === "prokashmal799@gmail.com" ? (
+                      <span className="text-[7.5px] text-emerald-400 font-extrabold flex items-center gap-0.5 mt-1 tracking-wider uppercase">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 block animate-pulse"></span> WRITES LIVE
+                      </span>
+                    ) : (
+                      <span className="text-[7.5px] text-rose-400 font-extrabold flex items-center gap-0.5 mt-1 tracking-wider uppercase">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 block"></span> READ ONLY
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={logoutAdmin}
+                  className="text-xs bg-white/10 hover:bg-rose-600/30 text-slate-300 hover:text-rose-200 border border-white/10 px-2 py-1 rounded-lg transition-all cursor-pointer font-bold active:scale-95"
+                >
+                  Exit
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[9px] text-amber-200/80 font-semibold tracking-wide text-center">
+                  ⚠️ SQLite / Firestore Read Only mode
+                </p>
+                <button
+                  onClick={loginWithGoogle}
+                  className="w-full flex items-center justify-center gap-1.5 bg-[#FF6B00] hover:bg-orange-500 text-white font-black text-[10px] tracking-wider uppercase py-1.5 px-2 rounded-lg transition-all shadow active:scale-95 cursor-pointer border border-[#FF6B00]"
+                >
+                  🔑 Google Auth
+                </button>
+              </div>
+            )}
           </div>
         )}
       </aside>
@@ -468,6 +530,29 @@ export const AdminPanel: React.FC = () => {
             {adminPage === "dashboard" && (
               <div className="space-y-6">
                 
+                {/* Firebase Authentication Security Banner */}
+                {(!currentUser || currentUser.email !== "prokashmal799@gmail.com") && (
+                  <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-2xl p-5 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                    <div className="flex gap-3.5">
+                      <AlertTriangle className="w-10 h-10 text-amber-600 shrink-0 mt-1" />
+                      <div>
+                        <h4 className="text-sm font-extrabold text-amber-950 font-baloo tracking-wide">
+                          Administrative Write Access Pending (Read-Only State Active)
+                        </h4>
+                        <p className="text-xs text-amber-800 mt-1.5 max-w-3xl leading-relaxed font-medium">
+                          Our portal is wired directly into persistent Firebase Firestore databases. Deployed security rules restrict write privileges to the authorized administrator: <strong className="text-yellow-950 bg-yellow-250 px-1.5 py-0.5 rounded font-mono font-bold text-[11px]">prokashmal799@gmail.com</strong>. Authenticate with Google now to sync statutory entries live!
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={loginWithGoogle}
+                      className="cursor-pointer shrink-0 bg-[#003399] hover:bg-blue-800 text-white font-extrabold text-xs px-4.5 py-2.5 rounded-xl uppercase tracking-wider transition-all shadow-md flex items-center gap-2 border border-[#003399] active:scale-95"
+                    >
+                      🔑 Sign In with Google
+                    </button>
+                  </div>
+                )}
+
                 {/* Welcome strip banner */}
                 <div className="bg-[#003399] text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
                   <div className="absolute right-0 top-0 opacity-10 p-6">
@@ -936,6 +1021,275 @@ export const AdminPanel: React.FC = () => {
 
                   </div>
 
+                  {/* --- NEW PREMIUM MODULE: FAQ & SEO RANK 1 SYSTEM --- */}
+                  <div className="border border-indigo-150 rounded-2xl bg-indigo-50/25 p-5 text-left space-y-6">
+                    <div className="flex items-center gap-2 pb-3 border-b border-indigo-100">
+                      <Sparkles className="w-5 h-5 text-indigo-600 animate-pulse" />
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Rank 1 SEO & Google Schema Engine</h3>
+                        <p className="text-[10px] text-slate-500 font-semibold">Tweak meta fields, structured JSON-LD schemas, and FAQ accordion arrays to reach Google Top Search lists.</p>
+                      </div>
+                    </div>
+
+                    {/* Meta Fields Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-slate-700 text-xs">
+                      
+                      {/* Meta Title */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <label className="font-extrabold text-slate-700 uppercase tracking-wider">SEO Meta Title *</label>
+                          <span className={`text-[10px] font-mono font-bold ${
+                            (jobForm.seo?.metaTitle?.length || 0) >= 50 && (jobForm.seo?.metaTitle?.length || 0) <= 60 
+                            ? "text-emerald-600" : "text-slate-400"
+                          }`}>
+                            {jobForm.seo?.metaTitle?.length || 0} / 60 chars (Target: 50-60)
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="e.g. SSC CGL Recruitment 2026 - Apply Online for 15000+ Vacancies"
+                          value={jobForm.seo?.metaTitle || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setJobForm(p => ({
+                              ...p,
+                              seo: { ...(p.seo || { metaTitle: "", metaDesc: "", focusKeywords: "", structuredDataSchema: "" }), metaTitle: val }
+                            }));
+                          }}
+                          className="w-full bg-white border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-indigo-500 transition text-slate-800 text-xs"
+                        />
+                      </div>
+
+                      {/* Focus SEO Keywords */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wide">Focus Keywords (comma-separated)</label>
+                        <input
+                          type="text"
+                          placeholder="naukri alerts, sarkari results 2026, SSC apply online, government job"
+                          value={jobForm.seo?.focusKeywords || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setJobForm(p => ({
+                              ...p,
+                              seo: { ...(p.seo || { metaTitle: "", metaDesc: "", focusKeywords: "", structuredDataSchema: "" }), focusKeywords: val }
+                            }));
+                          }}
+                          className="w-full bg-white border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-indigo-500 transition text-slate-800 text-xs"
+                        />
+                      </div>
+
+                      {/* Meta Description */}
+                      <div className="md:col-span-2 space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <label className="font-extrabold text-slate-700 uppercase tracking-wide">SEO Meta Description *</label>
+                          <span className={`text-[10px] font-mono font-bold ${
+                            (jobForm.seo?.metaDesc?.length || 0) >= 120 && (jobForm.seo?.metaDesc?.length || 0) <= 160 
+                            ? "text-emerald-600" : "text-slate-400"
+                          }`}>
+                            {jobForm.seo?.metaDesc?.length || 0} / 160 chars (Target: 120-160)
+                          </span>
+                        </div>
+                        <textarea
+                          rows={2}
+                          placeholder="e.g. Official Sarkari notification for SSC CGL 2026 is published. Over 15,000 vacant operations announced. Check complete qualifications, application steps, and timeline dates here."
+                          value={jobForm.seo?.metaDesc || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setJobForm(p => ({
+                              ...p,
+                              seo: { ...(p.seo || { metaTitle: "", metaDesc: "", focusKeywords: "", structuredDataSchema: "" }), metaDesc: val }
+                            }));
+                          }}
+                          className="w-full bg-white border border-slate-200 p-3 rounded-xl outline-none font-semibold focus:border-indigo-500 transition text-slate-800 text-xs"
+                        />
+                      </div>
+
+                    </div>
+
+                    {/* Dynamic Auto SEO Helper button & structured schema generator */}
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 border border-indigo-100 rounded-xl space-y-4 text-xs">
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div>
+                          <span className="block text-xs font-black text-indigo-950 uppercase tracking-wider">⚡ Direct One-Click AI Optimizer</span>
+                          <span className="text-[10px] text-slate-500 font-medium">Instantly analyze standard inputs to populate optimized meta titles, descriptions, focus keywords, and dynamic FAQ arrays.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!jobForm.title || !jobForm.org) {
+                              addToast("⚠ Insert Job Title and Authority Board first to use AI optimizer!", "warn");
+                              return;
+                            }
+                            const keywords = `${jobForm.title.toLowerCase().split(' ').slice(0, 4).join(' ')}, ${jobForm.org.toLowerCase()}, sarkari naukri, free job status, live alerts 2026`;
+                            const optTitle = `${jobForm.title.split('(')[0].trim().slice(0, 40)} Recruitment 2026 - Apply Online at ${jobForm.org}`;
+                            const optDesc = `Latest Alert: ${jobForm.org} announces dynamic recruitment for ${jobForm.title} (${jobForm.vacancy || "various"} vacancies). Check syllabus details, fee threshold, age limits and submit online before ${jobForm.lastDate || "closing date"}.`;
+                            
+                            // Auto compile valid schema
+                            const ldSchema = JSON.stringify({
+                              "@context": "https://schema.org",
+                              "@type": "JobPosting",
+                              "title": jobForm.title,
+                              "description": jobForm.desc || optDesc,
+                              "identifier": {
+                                "@type": "PropertyValue",
+                                "name": jobForm.org,
+                                "value": `SARKARI-${Date.now()}`
+                              },
+                              "hiringOrganization": {
+                                "@type": "Organization",
+                                "name": jobForm.org,
+                                "sameAs": jobForm.applyLink || "https://sarkarialerts.com"
+                              },
+                              "industry": "Government Recruitment",
+                              "workHours": "Full-time",
+                              "employmentType": "FULL_TIME",
+                              "datePosted": new Date().toISOString().split('T')[0],
+                              "validThrough": jobForm.lastDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                              "baseSalary": {
+                                "@type": "MonetaryAmount",
+                                "currency": "INR",
+                                "value": {
+                                  "@type": "QuantitativeValue",
+                                  "value": jobForm.salary || "As per central matrix indices",
+                                  "unitText": "MONTH"
+                                }
+                              }
+                            }, null, 2);
+
+                            const generatedFaqs = [
+                              {
+                                question: `What is the last date to register online for ${jobForm.title}?`,
+                                answer: `The final timeline to submit applications online is ${jobForm.lastDate || "as indicated in the core prospectus advertisement handbook"}.`
+                              },
+                              {
+                                question: `How many vacancies are announced for ${jobForm.org} recruitment?`,
+                                answer: `There are currently ${jobForm.vacancy || "specified operational role"} vacancies listed in the official announcement PDF.`
+                              },
+                              {
+                                question: `What qualifications are required to apply for ${jobForm.title}?`,
+                                answer: `Candidates must possess ${jobForm.qual || "necessary credentials required by the specific statutory authority code"} to register.`
+                              }
+                            ];
+
+                            setJobForm(p => ({
+                              ...p,
+                              seo: {
+                                metaTitle: optTitle.slice(0, 60),
+                                metaDesc: optDesc.slice(0, 160),
+                                focusKeywords: keywords,
+                                structuredDataSchema: ldSchema
+                              },
+                              faq: generatedFaqs
+                            }));
+
+                            addToast("🚀 Live Google rank inputs generated correctly!", "success");
+                          }}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded-xl shadow-md cursor-pointer transition-all shrink-0"
+                        >
+                          Generate SEO & FAQ Schema
+                        </button>
+                      </div>
+
+                      {/* Structured Schema display */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-extrabold text-[#581c87] uppercase tracking-wide text-left">Structured Google Rich JSON-LD Snippet (Automated Schema)</label>
+                        <textarea
+                          rows={4}
+                          placeholder="{ ...JSON-LD Object... }"
+                          value={jobForm.seo?.structuredDataSchema || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setJobForm(p => ({
+                              ...p,
+                              seo: { ...(p.seo || { metaTitle: "", metaDesc: "", focusKeywords: "", structuredDataSchema: "" }), structuredDataSchema: val }
+                            }));
+                          }}
+                          className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl outline-none text-lime-400 text-[10px] font-mono leading-relaxed focus:border-purple-500 transition-all text-left"
+                        />
+                      </div>
+                    </div>
+
+                    {/* FAQ Builder Panel */}
+                    <div className="space-y-4 text-xs">
+                      <div className="flex justify-between items-center pb-2 border-b border-indigo-100">
+                        <div>
+                          <span className="block text-xs font-black text-slate-800 uppercase tracking-wide">📑 Dynamic FAQ Accorder List ({jobForm.faq?.length || 0})</span>
+                          <span className="text-[10px] text-slate-400 font-semibold">Generates Google Rich Snippet FAQ Accordions directly on the Job display page.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentFaqs = jobForm.faq || [];
+                            setJobForm(p => ({
+                              ...p,
+                              faq: [...currentFaqs, { question: "", answer: "" }]
+                            }));
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-sm cursor-pointer transition"
+                        >
+                          + Add New Query
+                        </button>
+                      </div>
+
+                      {(!jobForm.faq || jobForm.faq.length === 0) ? (
+                        <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-[11px] text-slate-400 font-medium">
+                          No FAQs specified yet. Use the Generative tool or click "+ Add New Query" above to start.
+                        </div>
+                      ) : (
+                        <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                          {jobForm.faq.map((item, index) => (
+                            <div key={index} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5 relative">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedFaqs = (jobForm.faq || []).filter((_, i) => i !== index);
+                                  setJobForm(p => ({ ...p, faq: updatedFaqs }));
+                                }}
+                                className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition"
+                                title="Remove FAQ"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                              
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Question #{index + 1}</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Can final year candidates register status?"
+                                  value={item.question}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = [...(jobForm.faq || [])];
+                                    updated[index] = { ...updated[index], question: val };
+                                    setJobForm(p => ({ ...p, faq: updated }));
+                                  }}
+                                  className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none font-semibold focus:border-indigo-500 text-slate-800 text-xs"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Answer #{index + 1}</label>
+                                <textarea
+                                  rows={1.5}
+                                  placeholder="e.g. Yes, final year students are eligible provided they declare actual credentials status on document validation days."
+                                  value={item.answer}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = [...(jobForm.faq || [])];
+                                    updated[index] = { ...updated[index], answer: val };
+                                    setJobForm(p => ({ ...p, faq: updated }));
+                                  }}
+                                  className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none font-semibold focus:border-indigo-500 text-slate-800 text-xs"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
                   {/* Submission triggers */}
                   <div className="border-t border-light pt-5 flex justify-end gap-3.5 select-none">
                     <button
@@ -1245,6 +1599,249 @@ export const AdminPanel: React.FC = () => {
                     </button>
 
                   </div>
+
+                </div>
+              </div>
+            )}
+
+            {/* SUB ROUTER VIEW: H) PUSH BROADCAST CONTROL CENTER */}
+            {adminPage === "push" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-extrabold font-baloo text-[#003399]">
+                    📢 Web Push Broadcast Control Center
+                  </h2>
+                  <p className="text-xs text-slate-401 font-semibold">Author and transmit real-time push alerts with instant Web Audio chime delivery.</p>
+                </div>
+
+                {/* Grid Panels */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 select-none text-left">
+                  
+                  {/* Left Col: Composer form (takes 2 cols) */}
+                  <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-md space-y-5">
+                    <div className="border-b border-light pb-2 flex items-center justify-between">
+                      <h3 className="font-baloo text-[#003399] font-black text-sm uppercase tracking-wider">
+                        Compose Push Broadcast Notification
+                      </h3>
+                      <span className="text-[9px] bg-sky-50 text-[#003399] border border-sky-100 uppercase font-bold px-2 py-0.5 rounded animate-pulse">
+                        LIVE TRANSCEIVER IN SERVICE
+                      </span>
+                    </div>
+
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!pushForm.title.trim() || !pushForm.body.trim()) {
+                        addToast("⚠ Please provide both a Title and Message for the broadcast!", "warn");
+                        return;
+                      }
+                      
+                      // Active trigger!
+                      sendPushAlertToClient(pushForm.title, pushForm.body, pushForm.category, pushForm.url);
+                      addToast("📢 Web Push notification successfully broadcasted to active subscribers!", "success");
+                      
+                      // Reset composer
+                      setPushForm({
+                        title: "",
+                        body: "",
+                        category: "Central Jobs",
+                        url: ""
+                      });
+                    }} className="space-y-4 text-xs font-bold text-slate-600">
+                      
+                      {/* Title & Category Row */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block mb-1 text-slate-500 uppercase tracking-widest text-[9px]">Broadcast Category</label>
+                          <select
+                            value={pushForm.category}
+                            onChange={(e) => setPushForm(p => ({ ...p, category: e.target.value }))}
+                            className="w-full bg-[#F8F9FF] border-2 border-slate-200 hover:border-[#003399] p-3 rounded-xl outline-none text-xs font-bold font-sans cursor-pointer text-slate-700"
+                          >
+                            <option value="Central Jobs">Central Jobs</option>
+                            <option value="State Jobs">State Jobs</option>
+                            <option value="Admit Cards">Admit Cards</option>
+                            <option value="Exam Results">Exam Results</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block mb-1 text-slate-500 uppercase tracking-widest text-[9px]">Target Redirect URL (Optional)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g., # or /jobs/12"
+                            value={pushForm.url}
+                            onChange={(e) => setPushForm(p => ({ ...p, url: e.target.value }))}
+                            className="w-full bg-[#F8F9FF] border-2 border-slate-200 focus:border-[#003399] p-3 rounded-xl outline-none font-bold text-slate-800 text-xs font-sans"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Title banner */}
+                      <div>
+                        <label className="block mb-1 text-slate-500 uppercase tracking-widest text-[9px]">Notification Headline / Title *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g., UPSC Civil Services Prelims Exam Result Declared!"
+                          value={pushForm.title}
+                          onChange={(e) => setPushForm(p => ({ ...p, title: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border-2 border-slate-200 focus:border-[#003399] p-3 rounded-xl outline-none font-bold text-slate-800 text-xs font-sans"
+                        />
+                      </div>
+
+                      {/* Body Message */}
+                      <div>
+                        <label className="block mb-1 text-slate-500 uppercase tracking-widest text-[9px]">Detailed Message / description *</label>
+                        <textarea
+                          required
+                          rows={4}
+                          placeholder="e.g., Central Commission has declared the qualified roll numbers list for upcoming mains stages. Download details immediately."
+                          value={pushForm.body}
+                          onChange={(e) => setPushForm(p => ({ ...p, body: e.target.value }))}
+                          className="w-full bg-[#F8F9FF] border-2 border-slate-200 focus:border-[#003399] p-3 rounded-xl outline-none font-bold text-slate-850 text-xs font-sans"
+                        />
+                      </div>
+
+                      <div className="flex justify-end pt-2">
+                        <button
+                          type="submit"
+                          className="w-full sm:w-auto bg-[#003399] hover:bg-blue-800 border border-[#002f9c] text-white text-xs font-black uppercase tracking-wider py-3.5 px-8 rounded-xl transition cursor-pointer select-none active:scale-95 flex items-center justify-center gap-2 shadow-md hover:shadow-blue-900/40"
+                        >
+                          <span>📢 Transmit Push Alert Live</span>
+                        </button>
+                      </div>
+
+                    </form>
+                  </div>
+
+                  {/* Right Col: Live Sandbox Stats (takes 1 col) */}
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md space-y-4">
+                      <h3 className="font-baloo text-[#003399] font-black text-xs uppercase tracking-wider border-b border-light pb-2">
+                        Receiver telemetry
+                      </h3>
+
+                      <div className="space-y-3 font-sans w-full">
+                        <div className="bg-[#10b981]/5 border border-[#10b981]/15 rounded-xl p-3 flex justify-between items-center text-xs w-full">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 block uppercase">Push Status</span>
+                            <span className="font-extrabold text-[#10b981]">SYSTEM ACTIVE 🟢</span>
+                          </div>
+                          <span className="w-2.5 h-2.5 bg-[#10b981] rounded-full animate-ping"></span>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-150 rounded-xl p-3 text-xs w-full">
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Subscribed Channels</span>
+                          <span className="font-extrabold text-[#003399] text-[11px] mt-1 block">
+                            Central, State, Admits, Results
+                          </span>
+                        </div>
+
+                        <div className="border border-slate-150 rounded-xl p-3 text-xs flex justify-between items-center w-full">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 block uppercase">Client Devices Registered</span>
+                            <span className="font-mono font-extrabold text-slate-800 text-[13px] mt-0.5 block">
+                              1 Sandbox Instance
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="border border-slate-150 rounded-xl p-3 text-xs flex justify-between items-center bg-yellow-50/15 w-full">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 block uppercase">Approx. Total Subscribers</span>
+                            <span className="font-mono font-extrabold text-amber-600 text-[13px] mt-0.5 block">
+                              4,920 Tokens (Simulated)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-inner border border-slate-950 text-left font-mono text-[10px] leading-relaxed relative overflow-hidden h-40 w-full animate-pulse">
+                      <div className="absolute top-1 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                      <span className="text-amber-400 font-bold uppercase tracking-widest text-[8px] block border-b border-white/10 pb-1 mb-2">📡 Receiver Console Stream</span>
+                      <div className="space-y-1 text-slate-300 max-h-24 overflow-y-auto">
+                        <p className="text-emerald-400 font-semibold">[04:04:10] Push server boot OK</p>
+                        <p className="text-sky-300">[04:12:44] Awaiting candidate subscriber permission request...</p>
+                        {pushAlerts.length > 0 && <p className="text-[#FF6B00]">[04:13:02] Client connection handshake granted</p>}
+                        {pushAlerts.map((arg) => (
+                          <p key={arg.id} className="text-slate-300 truncate font-mono">
+                            &gt; Dispatched: {arg.title}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Broadcast logs history */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md text-left select-none shadow-md">
+                  <div className="border-b border-light pb-2.5 flex items-center justify-between col-span-1">
+                    <div>
+                      <h3 className="font-baloo text-[#003399] font-black text-sm uppercase tracking-wider">
+                        Broadcast Queue Logs
+                      </h3>
+                      <p className="text-[10px] text-slate-400 font-bold mt-0.5">Logs of notifications received inside candidate device inbox folders</p>
+                    </div>
+                    {pushAlerts.length > 0 && (
+                      <button 
+                        onClick={() => {
+                          setPushAlerts([]);
+                          addToast("Cleared entire broadcast history logs!", "success");
+                        }}
+                        className="text-xs font-black text-[#ff0000] uppercase hover:underline cursor-pointer"
+                      >
+                        Clear All Logs &times;
+                      </button>
+                    )}
+                  </div>
+
+                  {pushAlerts.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400">
+                      <p className="text-sm font-black font-sans">No alerts sent yet inside this workspace session</p>
+                      <p className="text-xs text-slate-450 mt-1 uppercase font-semibold">Ready to route live broadcasts above</p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 border border-slate-150 rounded-xl overflow-hidden divide-y divide-dashed divide-slate-200">
+                      {pushAlerts.map((alert) => (
+                        <div key={alert.id} className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="bg-[#003399]/10 text-[#003399] font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded border border-[#003399]/10">
+                                {alert.category}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono font-bold">
+                                {new Date(alert.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <h4 className="font-extrabold text-sm text-slate-800">{alert.title}</h4>
+                            <p className="text-xs text-slate-500 font-semibold leading-relaxed">{alert.body}</p>
+                          </div>
+                          <div className="flex items-center gap-2 self-end md:self-center">
+                            <button
+                              onClick={() => {
+                                sendPushAlertToClient(alert.title, alert.body, alert.category, alert.url);
+                                addToast("📢 Dispatched identical push broadcast chimes!", "success");
+                              }}
+                              className="text-[10px] font-black uppercase text-sky-800 bg-sky-50 border border-sky-100 px-3 py-1.5 rounded-lg hover:bg-sky-100 transition duration-150 cursor-pointer"
+                            >
+                              Re-broadcast
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPushAlerts(prev => prev.filter(p => p.id !== alert.id));
+                                addToast("Alert trace removed from subscriber lists", "success");
+                              }}
+                              className="text-[10px] font-black uppercase text-rose-700 bg-rose-55 border border-rose-100 px-3 py-1.5 rounded-lg hover:bg-rose-150 transition duration-150 cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                 </div>
               </div>

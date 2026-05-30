@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "Job": {
+      "title": "Job",
+      "description": "Government or public sector job posting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Unique ID of the job" },
+        "title": { "type": "string" },
+        "org": { "type": "string" },
+        "category": { "type": "string" },
+        "state": { "type": "string" },
+        "vacancy": { "type": "string" },
+        "lastDate": { "type": "string" },
+        "qual": { "type": "string" },
+        "salary": { "type": "string" },
+        "fee": { "type": "string" },
+        "feeSC": { "type": "string" },
+        "feeFemale": { "type": "string" },
+        "ageLow": { "type": "string" },
+        "ageHigh": { "type": "string" },
+        "applyLink": { "type": "string" },
+        "notifLink": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "draft", "upcoming", "expired"] },
+        "isHot": { "type": "boolean" },
+        "isNew": { "type": "boolean" },
+        "desc": { "type": "string" },
+        "created": { "type": "string" }
+      },
+      "required": ["id", "title", "org", "category", "state", "status", "created"]
+    },
+    "ExamResult": {
+      "title": "ExamResult",
+      "description": "Sarkari Exam published results",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "exam": { "type": "string" },
+        "date": { "type": "string" },
+        "link": { "type": "string" },
+        "state": { "type": "string" },
+        "status": { "type": "string", "enum": ["published", "draft"] }
+      },
+      "required": ["id", "title", "exam", "date", "status"]
+    },
+    "AdmitCard": {
+      "title": "AdmitCard",
+      "description": "Released exam hall tickets and admit cards",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "exam": { "type": "string" },
+        "examDate": { "type": "string" },
+        "link": { "type": "string" },
+        "state": { "type": "string" },
+        "status": { "type": "string", "enum": ["published", "draft"] }
+      },
+      "required": ["id", "title", "exam", "examDate", "status"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global custom configurations and Google Adsense slots",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "email": { "type": "string" },
+        "pubId": { "type": "string" },
+        "headerSlot": { "type": "string" },
+        "sidebarSlot": { "type": "string" }
+      },
+      "required": ["siteName", "tagline", "email"]
+    },
+    "Ticker": {
+      "title": "Ticker",
+      "description": "Live scrolling text alert for system headings",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" }
+      },
+      "required": ["text"]
+    },
+    "PushAlert": {
+      "title": "PushAlert",
+      "description": "Broadcast job alert notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "required": ["id", "title", "body", "category", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/jobs/{jobId}": {
+      "schema": "Job",
+      "description": "Indexed list of active and upcoming career recruitment announcements"
+    },
+    "/results/{resultId}": {
+      "schema": "ExamResult",
+      "description": "Indexed statutory exam results and merit list notices"
+    },
+    "/admits/{admitId}": {
+      "schema": "AdmitCard",
+      "description": "Hall tickets and exam status timetables"
+    },
+    "/siteSettings/{settingsId}": {
+      "schema": "SiteSettings",
+      "description": "Global layout settings file"
+    },
+    "/ticker/{tickerId}": {
+      "schema": "Ticker",
+      "description": "Marquee scrolling banner news"
+    },
+    "/pushAlerts/{alertId}": {
+      "schema": "PushAlert",
+      "description": "Candidate subscriber message alerts"
+    }
+  }
+}
